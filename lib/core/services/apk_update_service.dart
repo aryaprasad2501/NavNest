@@ -76,9 +76,9 @@ class ApkUpdateService extends ChangeNotifier {
           versionCode: 2,
           releaseNotes:
               '• Enhanced NavBloom Storybook Grove with dynamic growth stages\n• CBSE Class 10 Board 2027 Syllabus full chapter tracking\n• Regain-inspired App Blocker & Strict Mode diagnostics\n• Optimized vector canvas rendering for Vivo Y28 (FuntouchOS)',
-          downloadUrl: 'https://github.com/navnest/releases/download/v1.2.0/NavNest_v1.2.0.apk',
-          sha256Checksum: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-          sizeBytes: 44200000,
+          downloadUrl: 'https://github.com/aryaprasad2501/NavNest/releases/download/v1.0.0/app-release.apk',
+          sha256Checksum: '482a949b89714cd671f3dbdebd347d497942b7239475c7fc32193be6b99beb6d',
+          sizeBytes: 53326719,
         );
         _status = UpdateStatus.updateAvailable;
       } else {
