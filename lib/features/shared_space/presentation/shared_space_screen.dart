@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../../../core/database/database_helper.dart';
+import '../../../core/services/local_storage_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -17,17 +19,40 @@ class SharedSpaceScreen extends StatefulWidget {
 }
 
 class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
-  bool _isPaired = true;
-  final String _inviteCode = 'NEST-2027-CBSE';
-  final String _partnerName = 'Divya 🌸';
-  final String _partnerTopic = 'Science: Chemical Reactions';
-  final int _partnerFocusMinutesToday = 145;
-  int _cheersSent = 3;
+  bool _isPaired = false;
+  String _inviteCode = 'NEST-2027-CBSE';
+  String _partnerName = '';
+  String _partnerTopic = '';
+  int _partnerFocusMinutesToday = 0;
+  int _cheersSent = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadState();
+    });
+  }
+
+  void _loadState() {
+    final storage = context.read<LocalStorageService>();
+    setState(() {
+      _isPaired = storage.isSharedPaired;
+      _partnerName = storage.sharedPartnerName;
+      _inviteCode = storage.sharedInviteCode;
+      _partnerTopic = _isPaired ? 'CBSE Class 10 Board Prep' : '';
+      _partnerFocusMinutesToday = 0;
+      _cheersSent = 0;
+    });
+  }
 
   void _copyInviteCode() {
     Clipboard.setData(ClipboardData(text: _inviteCode));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Invite code NEST-2027-CBSE copied to clipboard!')),
+      SnackBar(
+        content: Text('Invite code $_inviteCode copied to clipboard!'),
+        backgroundColor: AppColors.deepForest,
+      ),
     );
   }
 
@@ -44,6 +69,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
 
   void _showJoinSpaceDialog() {
     final codeController = TextEditingController();
+    final nameController = TextEditingController();
 
     showDialog(
       context: context,
@@ -54,10 +80,10 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Enter the 6-character code from your study partner:',
+              'Enter your study partner\'s invite code:',
               style: TextStyle(fontSize: 13),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             TextField(
               controller: codeController,
               textCapitalization: TextCapitalization.characters,
@@ -66,20 +92,49 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
                 border: OutlineInputBorder(borderRadius: AppRadius.roundedM),
               ),
             ),
+            const SizedBox(height: 14),
+            const Text(
+              'Partner\'s Name (optional):',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: nameController,
+              decoration: InputDecoration(
+                hintText: 'e.g. Study Partner 🌿',
+                border: OutlineInputBorder(borderRadius: AppRadius.roundedM),
+              ),
+            ),
           ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           FilledButton(
-            onPressed: () {
+            onPressed: () async {
+              final code = codeController.text.trim();
+              if (code.isEmpty) return;
+              final name = nameController.text.trim().isNotEmpty
+                  ? nameController.text.trim()
+                  : 'Study Partner 🌿';
               Navigator.pop(ctx);
-              setState(() => _isPaired = true);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Connected with $_partnerName in Private Shared Space!'),
-                  backgroundColor: AppColors.deepForest,
-                ),
-              );
+              final storage = context.read<LocalStorageService>();
+              await storage.setSharedPaired(true);
+              await storage.setSharedPartnerName(name);
+              setState(() {
+                _isPaired = true;
+                _partnerName = name;
+                _partnerTopic = 'CBSE Class 10 Board Prep';
+                _partnerFocusMinutesToday = 0;
+                _cheersSent = 0;
+              });
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Connected with $name in Private Shared Space!'),
+                    backgroundColor: AppColors.deepForest,
+                  ),
+                );
+              }
             },
             child: const Text('Connect'),
           ),
@@ -100,12 +155,23 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Stay')),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppColors.urgentRed),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              setState(() => _isPaired = false);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Disconnected from shared space.')),
-              );
+              final storage = context.read<LocalStorageService>();
+              await storage.clearSharedSpaceData();
+              await DatabaseHelper.instance.clearSharedSpace();
+              setState(() {
+                _isPaired = false;
+                _partnerName = '';
+                _partnerTopic = '';
+                _partnerFocusMinutesToday = 0;
+                _cheersSent = 0;
+              });
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Disconnected from shared space.')),
+                );
+              }
             },
             child: const Text('Disconnect'),
           ),
@@ -121,7 +187,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
     final myFocusMins = forest.totalFocusMinutes;
     final combinedFocusMins = myFocusMins + (_isPaired ? _partnerFocusMinutesToday : 0);
     final myTreesCount = forest.totalTreesCount;
-    final combinedTreesCount = myTreesCount + (_isPaired ? 18 : 0);
+    final combinedTreesCount = myTreesCount;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkCanvas : AppColors.ivoryCanvas,
@@ -174,6 +240,16 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
             ] else ...[
               // Unpaired State / Join Space
               _buildUnpairedCard(isDark),
+
+              const SizedBox(height: AppSpacing.l),
+
+              // How It Works
+              _buildHowItWorksCard(isDark),
+
+              const SizedBox(height: AppSpacing.l),
+
+              // Privacy & Security Guarantee
+              _buildPrivacyNoticeCard(isDark),
             ],
 
             const SizedBox(height: AppSpacing.xxl),
@@ -184,38 +260,25 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
   }
 
   Widget _buildPartnerStatusCard(bool isDark) {
+    final initial = _partnerName.isNotEmpty ? _partnerName[0].toUpperCase() : 'P';
     return NestCard(
       color: isDark ? AppColors.darkCard : AppColors.cardSurface,
       child: Row(
         children: [
-          Stack(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: AppColors.sageTint,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.sageBorder, width: 1.5),
-                ),
-                child: const Center(
-                  child: Text('D', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.deepForest)),
-                ),
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.sageTint,
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.sageBorder, width: 1.5),
+            ),
+            child: Center(
+              child: Text(
+                initial,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.deepForest),
               ),
-              Positioned(
-                bottom: 0,
-                right: 0,
-                child: Container(
-                  width: 14,
-                  height: 14,
-                  decoration: BoxDecoration(
-                    color: AppColors.safeGreen,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -224,13 +287,22 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
               children: [
                 Row(
                   children: [
-                    Text(_partnerName, style: AppTypography.titleMedium),
+                    Flexible(
+                      child: Text(
+                        _partnerName,
+                        style: AppTypography.titleMedium,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                     const SizedBox(width: 8),
-                    const NestBadge(label: 'Studying Now', variant: NestBadgeVariant.safeGreen, isDense: true),
+                    const NestBadge(label: 'Connected', variant: NestBadgeVariant.safeGreen, isDense: true),
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text('Active Focus: $_partnerTopic • 32m', style: AppTypography.bodySmall),
+                Text(
+                  _partnerTopic.isNotEmpty ? _partnerTopic : 'CBSE Class 10 Board Prep',
+                  style: AppTypography.bodySmall,
+                ),
               ],
             ),
           ),
@@ -285,7 +357,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
                 const SizedBox(height: 4),
                 Text('$combinedTrees Trees', style: AppTypography.titleLarge.copyWith(color: AppColors.sageGreen)),
                 const SizedBox(height: 2),
-                Text('$myTrees You • 18 Divya', style: AppTypography.bodySmall.copyWith(fontSize: 10)),
+                Text('$myTrees You • 0 $_partnerName', style: AppTypography.bodySmall.copyWith(fontSize: 10)),
               ],
             ),
           ),
@@ -295,6 +367,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
   }
 
   Widget _buildSharedGroveCard(ForestProvider forest, bool isDark) {
+    final trees = forest.trees;
     return NestCard(
       color: isDark ? AppColors.darkCard : AppColors.elevatedSurface,
       border: BorderSide(color: isDark ? AppColors.darkBorder : AppColors.sageBorder),
@@ -323,15 +396,25 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
               borderRadius: AppRadius.roundedM,
               border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                _buildGroveTree('You', Icons.park_rounded, AppColors.deepForest, forest.trees.isNotEmpty ? forest.trees.first.species.displayName : 'Pine'),
-                _buildGroveTree('Divya', Icons.spa_rounded, AppColors.sageGreen, 'Cherry Blossom'),
-                _buildGroveTree('You', Icons.nature_rounded, AppColors.deepForest, 'Ancient Oak'),
-                _buildGroveTree('Divya', Icons.park_rounded, AppColors.sageGreen, 'Golden Ginkgo'),
-              ],
-            ),
+            child: trees.isEmpty
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Text(
+                        'Your shared grove is ready! Start a focus session to grow your first joint tree.',
+                        style: AppTypography.bodySmall.copyWith(
+                          color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: trees.take(4).map((t) {
+                      return _buildGroveTree('You', Icons.park_rounded, AppColors.deepForest, t.species.displayName);
+                    }).toList(),
+                  ),
           ),
         ],
       ),
@@ -405,6 +488,168 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
     );
   }
 
+  Widget _buildUnpairedCard(bool isDark) {
+    return NestCard(
+      color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.sageGreen.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.people_outline_rounded, size: 44, color: AppColors.sageGreen),
+          ),
+          const SizedBox(height: 16),
+          Text('Private 1-to-1 Shared Space', style: AppTypography.titleLarge, textAlign: TextAlign.center),
+          const SizedBox(height: 8),
+          Text(
+            'Pair with one trusted study partner to share focus accountability, grow a joint forest grove, and stay motivated together for CBSE Class 10.',
+            style: AppTypography.bodyMedium.copyWith(
+              color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+              height: 1.4,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+
+          // Invite code box
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: isDark ? AppColors.darkSurface : AppColors.warmCream,
+              borderRadius: AppRadius.roundedM,
+              border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('YOUR INVITE CODE', style: AppTypography.labelSmall.copyWith(fontSize: 10, letterSpacing: 0.8)),
+                      const SizedBox(height: 2),
+                      Text(
+                        _inviteCode,
+                        style: AppTypography.titleMedium.copyWith(
+                          color: AppColors.deepForest,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.copy_rounded, color: AppColors.deepForest, size: 20),
+                  onPressed: _copyInviteCode,
+                  tooltip: 'Copy Code',
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+          NestButton(
+            label: 'Share Invite Code',
+            icon: Icons.share_rounded,
+            onPressed: _copyInviteCode,
+            variant: NestButtonVariant.primary,
+            isFullWidth: true,
+          ),
+          const SizedBox(height: 10),
+          NestButton(
+            label: 'Join Partner with Code',
+            icon: Icons.login_rounded,
+            onPressed: _showJoinSpaceDialog,
+            variant: NestButtonVariant.secondary,
+            isFullWidth: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHowItWorksCard(bool isDark) {
+    return NestCard(
+      color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('How 1-to-1 Accountability Works', style: AppTypography.titleMedium),
+          const SizedBox(height: 4),
+          Text('Designed for pure study focus without social media distractions', style: AppTypography.bodySmall),
+          const SizedBox(height: AppSpacing.m),
+          _buildHowItWorksItem(
+            icon: Icons.park_rounded,
+            iconColor: AppColors.deepForest,
+            title: 'Joint Forest Sanctuary',
+            subtitle: 'Every time either of you completes a focus session, your trees grow together in a shared grove.',
+            isDark: isDark,
+          ),
+          const SizedBox(height: 12),
+          _buildHowItWorksItem(
+            icon: Icons.timer_outlined,
+            iconColor: AppColors.sageGreen,
+            title: 'Live Focus Indicator',
+            subtitle: 'See when your partner is studying live to inspire each other without interrupting.',
+            isDark: isDark,
+          ),
+          const SizedBox(height: 12),
+          _buildHowItWorksItem(
+            icon: Icons.favorite_border_rounded,
+            iconColor: AppColors.amberHoney,
+            title: 'Pre-written Study Cheers',
+            subtitle: 'Send one-tap positive cheers like "Keep growing! 🌱" without opening chatting apps.',
+            isDark: isDark,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHowItWorksItem({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required bool isDark,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.12),
+            borderRadius: AppRadius.roundedS,
+          ),
+          child: Icon(icon, color: iconColor, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppTypography.labelLarge),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: AppTypography.bodySmall.copyWith(
+                  color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildPrivacyNoticeCard(bool isDark) {
     return Container(
       padding: AppSpacing.cardPaddingDense,
@@ -425,43 +670,6 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
                 height: 1.3,
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildUnpairedCard(bool isDark) {
-    return NestCard(
-      color: isDark ? AppColors.darkCard : AppColors.cardSurface,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          const SizedBox(height: 12),
-          const Icon(Icons.people_outline_rounded, size: 48, color: AppColors.sageGreen),
-          const SizedBox(height: 14),
-          Text('Study Together in Private', style: AppTypography.titleLarge),
-          const SizedBox(height: 6),
-          Text(
-            'Connect with one friend or study partner. Grow a joint forest and share exam countdowns distraction-free.',
-            style: AppTypography.bodyMedium,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          NestButton(
-            label: 'Share Invite Code',
-            icon: Icons.copy_rounded,
-            onPressed: _copyInviteCode,
-            variant: NestButtonVariant.primary,
-            isFullWidth: true,
-          ),
-          const SizedBox(height: 10),
-          NestButton(
-            label: 'Join with Code',
-            icon: Icons.login_rounded,
-            onPressed: _showJoinSpaceDialog,
-            variant: NestButtonVariant.secondary,
-            isFullWidth: true,
           ),
         ],
       ),

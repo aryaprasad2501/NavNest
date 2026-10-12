@@ -54,18 +54,16 @@ void main() {
       await dbHelper.close();
     });
 
-    test('seedInitialForestData populates default trees, decorations, journal, and achievements', () async {
+    test('seedInitialForestData populates decorations and achievements catalogue with clean tree slate', () async {
       final trees = await dbHelper.getForestTrees();
-      expect(trees.length, greaterThanOrEqualTo(4));
-      expect(trees.any((t) => t.species == TreeSpecies.cherryBlossom), isTrue);
-      expect(trees.any((t) => t.species == TreeSpecies.mountainPine), isTrue);
+      expect(trees.length, equals(0)); // Clean slate starts at 0 trees
 
       final decorations = await dbHelper.getDecorations();
       expect(decorations.length, greaterThanOrEqualTo(4));
       expect(decorations.any((d) => d.name == 'Stone Lantern'), isTrue);
 
       final journal = await dbHelper.getJournalEntries();
-      expect(journal.length, greaterThanOrEqualTo(4));
+      expect(journal.length, equals(0)); // Clean slate starts at 0 journal entries
 
       final achievements = await dbHelper.getAchievements();
       expect(achievements.length, greaterThanOrEqualTo(5));
@@ -109,15 +107,16 @@ void main() {
     });
 
     test('ForestDecorationModel unlock and toggle equip operations work', () async {
+      const lanternId = 'dec_lantern_1';
+      // Unlock decoration first
+      await dbHelper.unlockDecoration(lanternId, 60);
+
       var decs = await dbHelper.getDecorations();
-      final unlockedCount = decs.where((d) => d.isUnlocked).length;
-      expect(unlockedCount, greaterThanOrEqualTo(3));
+      final lantern = decs.firstWhere((d) => d.id == lanternId);
+      expect(lantern.isUnlocked, isTrue);
 
       // Toggle equip state of stone lantern
-      const lanternId = 'dec_lantern_1';
-      final lanternBefore = decs.firstWhere((d) => d.id == lanternId);
-      final prevEquipped = lanternBefore.isEquipped;
-
+      final prevEquipped = lantern.isEquipped;
       await dbHelper.toggleEquipDecoration(lanternId, !prevEquipped);
       decs = await dbHelper.getDecorations();
       final lanternAfter = decs.firstWhere((d) => d.id == lanternId);

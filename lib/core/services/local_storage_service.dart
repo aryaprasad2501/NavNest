@@ -8,6 +8,11 @@ class LocalStorageService {
   static const String _keyFirstLaunch = 'navnest_is_first_launch';
   static const String _keyAutoStartNextSession = 'navnest_auto_start_next';
 
+  static const String _keyCleanSlatePurged = 'navnest_clean_slate_v1_0_1';
+  static const String _keySharedPaired = 'navnest_shared_paired';
+  static const String _keySharedPartnerName = 'navnest_shared_partner_name';
+  static const String _keySharedInviteCode = 'navnest_shared_invite_code';
+
   final SharedPreferences _prefs;
 
   LocalStorageService(this._prefs);
@@ -40,4 +45,25 @@ class LocalStorageService {
   bool get autoStartNextSession => _prefs.getBool(_keyAutoStartNextSession) ?? false;
   Future<bool> setAutoStartNextSession(bool enabled) =>
       _prefs.setBool(_keyAutoStartNextSession, enabled);
+
+  bool get isCleanSlatePurged => _prefs.getBool(_keyCleanSlatePurged) ?? false;
+  Future<bool> setCleanSlatePurged() =>
+      _prefs.setBool(_keyCleanSlatePurged, true);
+
+  bool get isSharedPaired => _prefs.getBool(_keySharedPaired) ?? false;
+  Future<bool> setSharedPaired(bool paired) =>
+      _prefs.setBool(_keySharedPaired, paired);
+
+  String get sharedPartnerName => _prefs.getString(_keySharedPartnerName) ?? '';
+  Future<bool> setSharedPartnerName(String name) =>
+      _prefs.setString(_keySharedPartnerName, name);
+
+  String get sharedInviteCode => _prefs.getString(_keySharedInviteCode) ?? 'NEST-2027-CBSE';
+  Future<bool> setSharedInviteCode(String code) =>
+      _prefs.setString(_keySharedInviteCode, code);
+
+  Future<void> clearSharedSpaceData() async {
+    await _prefs.setBool(_keySharedPaired, false);
+    await _prefs.remove(_keySharedPartnerName);
+  }
 }

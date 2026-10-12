@@ -126,6 +126,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
     // 1. Purge all dummy data to guarantee clean slate
     await DatabaseHelper.instance.purgeDummyDataAndStartFresh();
+    await localStorage.clearSharedSpaceData();
+    await localStorage.setCleanSlatePurged();
 
     // 2. Save fresh student profile
     final baseProfile = auth.currentUser ?? UserProfile.defaultProfile();

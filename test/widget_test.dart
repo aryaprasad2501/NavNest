@@ -191,6 +191,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Private Shared Space'), findsOneWidget);
-    expect(find.text('Combined Focus'), findsOneWidget);
+    expect(find.text('Private 1-to-1 Shared Space'), findsOneWidget);
   });
 }

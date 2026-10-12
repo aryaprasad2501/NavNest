@@ -96,28 +96,24 @@ void main() {
   });
 
   group('Planner & Exam Database Tests', () {
-    test('seedInitialPlannerData populates past, today, and future tasks & exams', () async {
+    test('seedInitialPlannerData populates upcoming CBSE board exams with clean task slate', () async {
       await dbHelper.seedInitialPlannerData(db);
 
       final now = DateTime.now();
       final todayKey = DatabaseHelper.formatDbDate(now);
 
-      // Verify today's tasks exist and have joined subject details
+      // Verify tasks start with a clean slate (0 tasks)
       final todayTasks = await dbHelper.getTasksForDate(todayKey);
-      expect(todayTasks.length, greaterThanOrEqualTo(2));
-      final scienceTask = todayTasks.firstWhere((t) => t.id == 'pt_today_1');
-      expect(scienceTask.subjectName, equals('Science'));
-      expect(scienceTask.subjectColorHex, equals('#3B8A6E'));
+      expect(todayTasks.length, equals(0));
 
-      // Verify past missed tasks exist
+      // Verify missed tasks before today also start at 0
       final missed = await dbHelper.getMissedTasksBefore(todayKey);
-      expect(missed.length, greaterThanOrEqualTo(1));
-      expect(missed.first.status, equals(PlannerTaskStatus.missed));
+      expect(missed.length, equals(0));
 
-      // Verify exams seeded
+      // Verify CBSE exams are properly seeded
       final exams = await dbHelper.getExams();
       expect(exams.length, equals(4));
-      expect(exams.first.title, contains('Board'));
+      expect(exams.any((e) => e.title.contains('Board')), isTrue);
       expect(exams.first.daysRemaining, greaterThan(0));
     });
 

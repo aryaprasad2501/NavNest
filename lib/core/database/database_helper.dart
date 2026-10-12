@@ -1451,162 +1451,11 @@ class DatabaseHelper {
     return '${dt.year.toString().padLeft(4, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 
-  /// Initial seed for past, present, and future tasks & upcoming exams
+  /// Initial seed for upcoming exams
   Future<void> seedInitialPlannerData([Database? targetDb]) async {
     final db = targetDb ?? await database;
-    final taskCount = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM planner_tasks'),
-    );
-    if (taskCount != null && taskCount > 0) return;
-
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final twoDaysAgo = today.subtract(const Duration(days: 2));
-    final yesterday = today.subtract(const Duration(days: 1));
-    final tomorrow = today.add(const Duration(days: 1));
-    final dayAfterTomorrow = today.add(const Duration(days: 2));
-
-    final sampleTasks = [
-      // Past Day - 2 Days Ago (Completed)
-      {
-        'id': 'pt_past_1',
-        'date': formatDbDate(twoDaysAgo),
-        'subjectId': 'sub_maths',
-        'title': 'Real Numbers: Fundamental Theorem & HCF',
-        'startTime': '09:00 AM',
-        'endTime': '10:00 AM',
-        'plannedMinutes': 60,
-        'actualMinutes': 60,
-        'status': 'COMPLETED',
-        'notes': 'Mastered prime factorisation and NCERT Exercise 1.1.',
-      },
-      {
-        'id': 'pt_past_2',
-        'date': formatDbDate(twoDaysAgo),
-        'subjectId': 'sub_science',
-        'title': 'Chemical Reactions: Balancing Equations',
-        'startTime': '11:00 AM',
-        'endTime': '12:00 PM',
-        'plannedMinutes': 60,
-        'actualMinutes': 55,
-        'status': 'COMPLETED',
-        'notes': 'Balanced 20 chemical equations and redox pairs.',
-      },
-
-      // Past Day - Yesterday (1 Missed, 1 Completed)
-      {
-        'id': 'pt_yest_1',
-        'date': formatDbDate(yesterday),
-        'subjectId': 'sub_science',
-        'title': 'Acids, Bases & Salts: pH Scale Applications',
-        'startTime': '04:00 PM',
-        'endTime': '05:00 PM',
-        'plannedMinutes': 60,
-        'actualMinutes': 0,
-        'status': 'MISSED',
-        'notes': 'Delayed due to school lab record submission.',
-      },
-      {
-        'id': 'pt_yest_2',
-        'date': formatDbDate(yesterday),
-        'subjectId': 'sub_sst',
-        'title': 'The Rise of Nationalism in Europe Review',
-        'startTime': '06:00 PM',
-        'endTime': '07:00 PM',
-        'plannedMinutes': 60,
-        'actualMinutes': 60,
-        'status': 'COMPLETED',
-        'notes': 'French Revolution timeline and Napoleonic code notes.',
-      },
-
-      // Today
-      {
-        'id': 'pt_today_1',
-        'date': formatDbDate(today),
-        'subjectId': 'sub_science',
-        'title': 'Science: Life Processes - Nutrition & Respiration',
-        'startTime': '09:00 AM',
-        'endTime': '10:30 AM',
-        'plannedMinutes': 90,
-        'actualMinutes': 0,
-        'status': 'UPCOMING',
-        'notes': 'Diagrams of human alimentary canal and stomata.',
-      },
-      {
-        'id': 'pt_today_2',
-        'date': formatDbDate(today),
-        'subjectId': 'sub_maths',
-        'title': 'Mathematics: Polynomials Zeroes & Coefficients',
-        'startTime': '11:00 AM',
-        'endTime': '12:30 PM',
-        'plannedMinutes': 90,
-        'actualMinutes': 0,
-        'status': 'UPCOMING',
-        'notes': 'Quadratic relationship α+β and αβ derivations.',
-      },
-      {
-        'id': 'pt_today_3',
-        'date': formatDbDate(today),
-        'subjectId': 'sub_sst',
-        'title': 'Social Science: Resources and Development Soil Types',
-        'startTime': '04:00 PM',
-        'endTime': '05:00 PM',
-        'plannedMinutes': 60,
-        'actualMinutes': 0,
-        'status': 'UPCOMING',
-        'notes': 'Alluvial and black soil geographical map distribution.',
-      },
-
-      // Future - Tomorrow
-      {
-        'id': 'pt_fut_1',
-        'date': formatDbDate(tomorrow),
-        'subjectId': 'sub_english',
-        'title': 'English: A Letter to God & Lencho Sketch',
-        'startTime': '09:00 AM',
-        'endTime': '10:30 AM',
-        'plannedMinutes': 90,
-        'actualMinutes': 0,
-        'status': 'UPCOMING',
-        'notes': 'Value-based theme and ironical climax answer.',
-      },
-      {
-        'id': 'pt_fut_2',
-        'date': formatDbDate(tomorrow),
-        'subjectId': 'sub_it402',
-        'title': 'IT 402: Digital Documentation Style Templates',
-        'startTime': '11:30 AM',
-        'endTime': '01:00 PM',
-        'plannedMinutes': 90,
-        'actualMinutes': 0,
-        'status': 'UPCOMING',
-        'notes': 'Styles window shortcut key formatting practice.',
-      },
-
-      // Future - Day After Tomorrow
-      {
-        'id': 'pt_fut_3',
-        'date': formatDbDate(dayAfterTomorrow),
-        'subjectId': 'sub_hindi',
-        'title': 'Hindi: सूरदास के पद व्याख्या एवं प्रश्नोत्तर',
-        'startTime': '03:00 PM',
-        'endTime': '04:00 PM',
-        'plannedMinutes': 60,
-        'actualMinutes': 0,
-        'status': 'UPCOMING',
-        'notes': 'गोपियों का विरह वर्णन और उद्धव का योग संदेश।',
-      },
-    ];
-
-    for (final t in sampleTasks) {
-      await db.insert('planner_tasks', {
-        ...t,
-        'chapterId': null,
-        'subtopicId': null,
-        'outcome': null,
-        'createdAt': now.toIso8601String(),
-      });
-    }
 
     // Seed initial exams
     final examCount = Sqflite.firstIntValue(
@@ -1761,6 +1610,18 @@ class DatabaseHelper {
     await db.delete('study_sessions');
     // Remove dummy journal entries
     await db.delete('forest_journal');
+    // Clear shared spaces
+    try {
+      await db.delete('shared_spaces');
+    } catch (_) {}
+    // Reset all subtopics to clean NOT_STARTED
+    try {
+      await db.update('subtopics', {
+        'status': 'NOT_STARTED',
+        'completedAt': null,
+        'revisionCount': 0,
+      });
+    } catch (_) {}
     // Reset achievements progress
     await db.update('achievements', {'progress': 0, 'isUnlocked': 0, 'unlockedAt': null});
     // Reset decorations to locked and unequipped
@@ -1772,6 +1633,7 @@ class DatabaseHelper {
         'bestStreak': 0,
         'totalXp': 0,
         'coins': 0,
+        'activeSharedSpaceId': null,
       });
     } catch (_) {}
   }
@@ -1869,82 +1731,12 @@ class DatabaseHelper {
     ''');
   }
 
-  /// Initial seed for Forest trees, decorations, journal entries, and achievements
+  /// Initial seed for Forest decorations and achievements catalogue
   Future<void> seedInitialForestData([Database? targetDb]) async {
     final db = targetDb ?? await database;
     await ensureForestTablesExist(db);
 
-    final treeCount = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM forest_trees'),
-    );
-
-    final now = DateTime.now();
-
-    // 1. Seed Trees if empty
-    if (treeCount == null || treeCount == 0) {
-      final sampleTrees = [
-        ForestTreeModel(
-          id: 'tree_cherry_1',
-          species: TreeSpecies.cherryBlossom,
-          stage: 5,
-          xRatio: 0.24,
-          yRatio: 0.44,
-          plantedAt: now.subtract(const Duration(days: 4)),
-          maturedAt: now.subtract(const Duration(days: 3)),
-          subjectName: 'Science',
-          chapterName: 'Life Processes',
-          focusMinutes: 120,
-          xpEarned: 300,
-          coinsEarned: 60,
-        ),
-        ForestTreeModel(
-          id: 'tree_pine_1',
-          species: TreeSpecies.mountainPine,
-          stage: 4,
-          xRatio: 0.74,
-          yRatio: 0.42,
-          plantedAt: now.subtract(const Duration(days: 3)),
-          subjectName: 'Mathematics',
-          chapterName: 'Real Numbers',
-          focusMinutes: 90,
-          xpEarned: 220,
-          coinsEarned: 45,
-        ),
-        ForestTreeModel(
-          id: 'tree_oak_1',
-          species: TreeSpecies.ancientOak,
-          stage: 5,
-          xRatio: 0.46,
-          yRatio: 0.60,
-          plantedAt: now.subtract(const Duration(days: 2)),
-          maturedAt: now.subtract(const Duration(days: 1)),
-          subjectName: 'Social Science',
-          chapterName: 'The Rise of Nationalism in Europe',
-          focusMinutes: 110,
-          xpEarned: 260,
-          coinsEarned: 55,
-        ),
-        ForestTreeModel(
-          id: 'tree_willow_1',
-          species: TreeSpecies.riverWillow,
-          stage: 3,
-          xRatio: 0.30,
-          yRatio: 0.72,
-          plantedAt: now.subtract(const Duration(days: 1)),
-          subjectName: 'English',
-          chapterName: 'First Flight: Prose',
-          focusMinutes: 60,
-          xpEarned: 150,
-          coinsEarned: 30,
-        ),
-      ];
-
-      for (final t in sampleTrees) {
-        await db.insert('forest_trees', t.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-    }
-
-    // 2. Seed Decorations if empty
+    // 1. Seed Decorations Catalogue if empty (all initially locked)
     final decCount = Sqflite.firstIntValue(
       await db.rawQuery('SELECT COUNT(*) FROM forest_decorations'),
     );
@@ -1956,8 +1748,8 @@ class DatabaseHelper {
           description: 'Glows warmly in the moonlit forest during night study sessions.',
           category: DecorationCategory.lighting,
           costCoins: 60,
-          isUnlocked: true,
-          isEquipped: true,
+          isUnlocked: false,
+          isEquipped: false,
           xRatio: 0.38,
           yRatio: 0.48,
           iconName: 'light_mode',
@@ -1968,8 +1760,8 @@ class DatabaseHelper {
           description: 'Fragrant pink and blue alpine blossoms that brighten the meadow.',
           category: DecorationCategory.flora,
           costCoins: 40,
-          isUnlocked: true,
-          isEquipped: true,
+          isUnlocked: false,
+          isEquipped: false,
           xRatio: 0.62,
           yRatio: 0.54,
           iconName: 'local_florist',
@@ -1980,8 +1772,8 @@ class DatabaseHelper {
           description: 'Smooth river stones leading towards the whispering waterfall.',
           category: DecorationCategory.pathway,
           costCoins: 80,
-          isUnlocked: true,
-          isEquipped: true,
+          isUnlocked: false,
+          isEquipped: false,
           xRatio: 0.50,
           yRatio: 0.68,
           iconName: 'route',
@@ -2029,77 +1821,20 @@ class DatabaseHelper {
       }
     }
 
-    // 3. Seed Journal Entries if empty
-    final journalCount = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM forest_journal'),
-    );
-    if (journalCount == null || journalCount == 0) {
-      final sampleJournal = [
-        ForestJournalEntry(
-          id: 'j_1',
-          title: 'Cherry Blossom reached Full Bloom! 🌸',
-          category: 'BLOOM',
-          date: now.subtract(const Duration(days: 3)),
-          subjectName: 'Science',
-          focusMinutes: 120,
-          xpEarned: 300,
-          coinsEarned: 60,
-          notes: 'Completed Nutrition & Respiration subtopics with perfect focus.',
-        ),
-        ForestJournalEntry(
-          id: 'j_2',
-          title: 'Planted Mountain Pine in Whisper Meadow',
-          category: 'PLANTING',
-          date: now.subtract(const Duration(days: 3)),
-          subjectName: 'Mathematics',
-          focusMinutes: 90,
-          xpEarned: 220,
-          coinsEarned: 45,
-          notes: 'Covered Fundamental Theorem of Arithmetic and HCF proofs.',
-        ),
-        ForestJournalEntry(
-          id: 'j_3',
-          title: 'Ancient Oak reached Full Bloom! 🌳',
-          category: 'BLOOM',
-          date: now.subtract(const Duration(days: 1)),
-          subjectName: 'Social Science',
-          focusMinutes: 110,
-          xpEarned: 260,
-          coinsEarned: 55,
-          notes: 'Reviewed Unification of Italy & Germany and French Revolution.',
-        ),
-        ForestJournalEntry(
-          id: 'j_4',
-          title: 'Unlocked Stone Lantern Decoration 🏮',
-          category: 'MILESTONE',
-          date: now.subtract(const Duration(hours: 18)),
-          focusMinutes: 0,
-          xpEarned: 50,
-          coinsEarned: 0,
-          notes: 'Sanctuary illuminated for moonlit evening study.',
-        ),
-      ];
-
-      for (final j in sampleJournal) {
-        await db.insert('forest_journal', j.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-    }
-
-    // 4. Seed Achievements if empty
+    // 2. Seed Achievements Catalogue if empty (all initially locked with 0 progress)
     final achCount = Sqflite.firstIntValue(
       await db.rawQuery('SELECT COUNT(*) FROM achievements'),
     );
     if (achCount == null || achCount == 0) {
       final sampleAchievements = [
-        AchievementModel(
+        const AchievementModel(
           id: 'ach_first_seed',
           title: 'First Seed',
           description: 'Complete your first 25-minute valid focus session.',
           iconName: 'spa',
-          progress: 1,
+          progress: 0,
           target: 1,
-          isUnlocked: true,
-          unlockedAt: now.subtract(const Duration(days: 4)),
+          isUnlocked: false,
           xpReward: 100,
           coinsReward: 50,
         ),
@@ -2108,7 +1843,7 @@ class DatabaseHelper {
           title: 'Green Thumb',
           description: 'Grow 5 trees to Stage 5 Full Bloom in your forest.',
           iconName: 'park',
-          progress: 2,
+          progress: 0,
           target: 5,
           isUnlocked: false,
           xpReward: 250,
@@ -2119,18 +1854,18 @@ class DatabaseHelper {
           title: 'Deep Roots',
           description: 'Accumulate 10 total focus hours in NavNest.',
           iconName: 'alarm_on',
-          progress: 6,
+          progress: 0,
           target: 10,
           isUnlocked: false,
           xpReward: 300,
           coinsReward: 150,
         ),
-        AchievementModel(
+        const AchievementModel(
           id: 'ach_night_owl',
           title: 'Moonlit Sanctuary',
           description: 'Complete 3 focus sessions in Moonlit Night mode.',
           iconName: 'dark_mode',
-          progress: 2,
+          progress: 0,
           target: 3,
           isUnlocked: false,
           xpReward: 150,
@@ -2141,7 +1876,7 @@ class DatabaseHelper {
           title: 'CBSE 10 Scholar',
           description: 'Cover 25 syllabus subtopics across any subjects.',
           iconName: 'auto_stories',
-          progress: 12,
+          progress: 0,
           target: 25,
           isUnlocked: false,
           xpReward: 400,
@@ -2301,6 +2036,11 @@ class DatabaseHelper {
     );
     if (results.isEmpty) return null;
     return SharedSpaceModel.fromMap(results.first);
+  }
+
+  Future<void> clearSharedSpace() async {
+    final db = await database;
+    await db.delete('shared_spaces');
   }
 
   // --- Close DB ---

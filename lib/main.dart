@@ -20,9 +20,11 @@ void main() async {
   await dbHelper.seedInitialPlannerData();
   await dbHelper.seedInitialForestData();
 
-  // If first launch, purge all dummy records so student starts fresh
-  if (localStorage.isFirstLaunch) {
+  // If clean slate hasn't been applied yet, purge all dummy records so student starts fresh
+  if (!localStorage.isCleanSlatePurged || localStorage.isFirstLaunch) {
     await dbHelper.purgeDummyDataAndStartFresh();
+    await localStorage.clearSharedSpaceData();
+    await localStorage.setCleanSlatePurged();
   }
 
   final authService = AuthService(dbHelper: dbHelper);
