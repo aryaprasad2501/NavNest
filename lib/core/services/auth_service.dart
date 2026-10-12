@@ -18,6 +18,7 @@ class AuthService extends ChangeNotifier {
       : _dbHelper = dbHelper ?? DatabaseHelper.instance,
         _googleSignIn = googleSignIn ??
             GoogleSignIn(
+              serverClientId: '385060063635-0v55tebqgg5bc0u354jtlr238e8ep2vm.apps.googleusercontent.com',
               scopes: <String>[
                 'email',
                 'https://www.googleapis.com/auth/userinfo.profile',
