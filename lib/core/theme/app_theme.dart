@@ -13,7 +13,7 @@ class AppTheme {
     return base.copyWith(
       scaffoldBackgroundColor: AppColors.ivoryCanvas,
       primaryColor: AppColors.deepForest,
-      colorScheme: ColorScheme.light(
+      colorScheme: const ColorScheme.light(
         primary: AppColors.deepForest,
         onPrimary: Colors.white,
         primaryContainer: AppColors.sageTint,
@@ -33,6 +33,19 @@ class AppTheme {
         outline: AppColors.borderSubtle,
         outlineVariant: AppColors.borderStrong,
       ),
+      textTheme: const TextTheme(
+        displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: -0.8, color: AppColors.textPrimary),
+        displayMedium: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: AppColors.textPrimary),
+        titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: -0.3, color: AppColors.textPrimary),
+        titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.1, color: AppColors.textPrimary),
+        titleSmall: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.0, color: AppColors.textPrimary),
+        bodyLarge: TextStyle(fontSize: 15, fontWeight: FontWeight.w400, letterSpacing: 0.1, color: AppColors.textSecondary),
+        bodyMedium: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.1, color: AppColors.textSecondary),
+        bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, letterSpacing: 0.2, color: AppColors.textMuted),
+        labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3, color: AppColors.textPrimary),
+        labelMedium: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.4, color: AppColors.textMuted),
+        labelSmall: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: AppColors.textMuted),
+      ),
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.ivoryCanvas,
         surfaceTintColor: Colors.transparent,
@@ -44,7 +57,7 @@ class AppTheme {
           statusBarIconBrightness: Brightness.dark,
           statusBarBrightness: Brightness.light,
         ),
-        titleTextStyle: AppTypography.titleLarge,
+        titleTextStyle: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
         iconTheme: IconThemeData(color: AppColors.deepForest),
       ),
       cardTheme: CardThemeData(
@@ -108,8 +121,8 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: AppRadius.roundedXL,
         ),
-        titleTextStyle: AppTypography.titleLarge,
-        contentTextStyle: AppTypography.bodyMedium,
+        titleTextStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+        contentTextStyle: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.cardSurface,
@@ -135,7 +148,7 @@ class AppTheme {
     return base.copyWith(
       scaffoldBackgroundColor: AppColors.darkCanvas,
       primaryColor: AppColors.sageLight,
-      colorScheme: ColorScheme.dark(
+      colorScheme: const ColorScheme.dark(
         primary: AppColors.sageLight,
         onPrimary: AppColors.darkCanvas,
         primaryContainer: AppColors.darkElevated,
@@ -155,6 +168,19 @@ class AppTheme {
         outline: AppColors.darkBorder,
         outlineVariant: AppColors.darkBorder,
       ),
+      textTheme: const TextTheme(
+        displayLarge: TextStyle(fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: -0.8, color: AppColors.darkTextPrimary),
+        displayMedium: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, letterSpacing: -0.5, color: AppColors.darkTextPrimary),
+        titleLarge: TextStyle(fontSize: 20, fontWeight: FontWeight.w600, letterSpacing: -0.3, color: AppColors.darkTextPrimary),
+        titleMedium: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: -0.1, color: AppColors.darkTextPrimary),
+        titleSmall: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.0, color: AppColors.darkTextPrimary),
+        bodyLarge: TextStyle(fontSize: 15, fontWeight: FontWeight.w400, letterSpacing: 0.1, color: AppColors.darkTextSecondary),
+        bodyMedium: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0.1, color: AppColors.darkTextSecondary),
+        bodySmall: TextStyle(fontSize: 12, fontWeight: FontWeight.w400, letterSpacing: 0.2, color: AppColors.darkTextMuted),
+        labelLarge: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.3, color: AppColors.darkTextPrimary),
+        labelMedium: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.4, color: AppColors.darkTextMuted),
+        labelSmall: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 0.5, color: AppColors.darkTextMuted),
+      ),
       appBarTheme: const AppBarTheme(
         backgroundColor: AppColors.darkCanvas,
         surfaceTintColor: Colors.transparent,
@@ -171,7 +197,7 @@ class AppTheme {
           fontWeight: FontWeight.w600,
           color: AppColors.darkTextPrimary,
         ),
-        iconTheme: IconThemeData(color: AppColors.darkTextPrimary),
+        iconTheme: IconThemeData(color: AppColors.sageLight),
       ),
       cardTheme: CardThemeData(
         color: AppColors.darkCard,
@@ -199,6 +225,35 @@ class AppTheme {
           textStyle: AppTypography.labelLarge.copyWith(color: Colors.white),
         ),
       ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppColors.sageLight,
+          side: const BorderSide(color: AppColors.darkBorder, width: 1.2),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          shape: RoundedRectangleBorder(
+            borderRadius: AppRadius.roundedM,
+          ),
+          textStyle: AppTypography.labelLarge.copyWith(color: AppColors.sageLight),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.sageLight,
+          textStyle: AppTypography.labelLarge,
+        ),
+      ),
+      chipTheme: ChipThemeData(
+        backgroundColor: AppColors.darkCard,
+        selectedColor: AppColors.forestEmerald,
+        disabledColor: AppColors.darkCard.withValues(alpha: 0.5),
+        labelStyle: AppTypography.labelMedium.copyWith(color: AppColors.darkTextPrimary),
+        secondaryLabelStyle: AppTypography.labelMedium.copyWith(color: AppColors.sageLight),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.roundedS,
+          side: const BorderSide(color: AppColors.darkBorder, width: 1),
+        ),
+      ),
       dialogTheme: DialogThemeData(
         backgroundColor: AppColors.darkSurface,
         surfaceTintColor: Colors.transparent,
@@ -220,6 +275,14 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: AppColors.darkElevated,
+        contentTextStyle: AppTypography.bodyMedium.copyWith(color: AppColors.darkTextPrimary),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.roundedM,
         ),
       ),
     );

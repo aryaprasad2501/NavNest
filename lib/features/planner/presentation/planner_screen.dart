@@ -231,7 +231,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? (isDark ? AppColors.deepForest : AppColors.sageGreen)
+                        ? (isDark ? AppColors.forestEmerald : AppColors.sageGreen)
                         : Colors.transparent,
                     borderRadius: AppRadius.roundedM,
                   ),

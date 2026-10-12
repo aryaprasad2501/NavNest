@@ -27,29 +27,30 @@ class NestButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     Color bg;
     Color fg;
     BorderSide? border;
 
     switch (variant) {
       case NestButtonVariant.primary:
-        bg = AppColors.deepForest;
+        bg = isDark ? AppColors.forestEmerald : AppColors.deepForest;
         fg = Colors.white;
         border = null;
         break;
       case NestButtonVariant.secondary:
-        bg = AppColors.sageTint;
-        fg = AppColors.deepForestDark;
-        border = const BorderSide(color: AppColors.sageBorder, width: 1);
+        bg = isDark ? AppColors.darkElevated : AppColors.sageTint;
+        fg = isDark ? AppColors.darkTextPrimary : AppColors.deepForestDark;
+        border = BorderSide(color: isDark ? AppColors.darkBorder : AppColors.sageBorder, width: 1);
         break;
       case NestButtonVariant.subtle:
         bg = Colors.transparent;
-        fg = AppColors.deepForest;
-        border = const BorderSide(color: AppColors.borderSubtle, width: 1);
+        fg = isDark ? AppColors.sageLight : AppColors.deepForest;
+        border = BorderSide(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle, width: 1);
         break;
       case NestButtonVariant.danger:
-        bg = AppColors.urgentRedLight;
-        fg = AppColors.urgentRed;
+        bg = isDark ? AppColors.urgentRed.withValues(alpha: 0.2) : AppColors.urgentRedLight;
+        fg = isDark ? const Color(0xFFFF7B7B) : AppColors.urgentRed;
         border = BorderSide(color: AppColors.urgentRed.withValues(alpha: 0.3), width: 1);
         break;
     }

@@ -12,7 +12,10 @@ import 'forest_journal_screen.dart';
 import 'forest_map_screen.dart';
 import 'providers/forest_provider.dart';
 import 'tree_details_screen.dart';
+import 'widgets/forest_particles_overlay.dart';
 import 'widgets/storybook_forest_painter.dart';
+
+enum ForestTimelineFilter { today, week, month, allTime }
 
 class NavBloomScreen extends StatefulWidget {
   final VoidCallback onStartTimer;
@@ -27,6 +30,8 @@ class NavBloomScreen extends StatefulWidget {
 }
 
 class _NavBloomScreenState extends State<NavBloomScreen> {
+  ForestTimelineFilter _selectedFilter = ForestTimelineFilter.today;
+
   void _openTreeDetails(ForestTreeModel tree) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -59,6 +64,175 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
     );
   }
 
+  List<ForestTreeModel> _filterTrees(List<ForestTreeModel> allTrees) {
+    final now = DateTime.now();
+    switch (_selectedFilter) {
+      case ForestTimelineFilter.today:
+        final startOfToday = DateTime(now.year, now.month, now.day);
+        return allTrees.where((t) => t.plantedAt.isAfter(startOfToday)).toList();
+      case ForestTimelineFilter.week:
+        final weekAgo = now.subtract(const Duration(days: 7));
+        return allTrees.where((t) => t.plantedAt.isAfter(weekAgo)).toList();
+      case ForestTimelineFilter.month:
+        final monthAgo = now.subtract(const Duration(days: 30));
+        return allTrees.where((t) => t.plantedAt.isAfter(monthAgo)).toList();
+      case ForestTimelineFilter.allTime:
+        return allTrees;
+    }
+  }
+
+  void _showTreeInspectSheet(ForestTreeModel tree) {
+    final effectiveDark = Theme.of(context).brightness == Brightness.dark ||
+        context.read<ForestProvider>().isMoonlitNight;
+    final cardBg = effectiveDark ? AppColors.darkSurface : AppColors.cardSurface;
+    final textCol = effectiveDark ? AppColors.darkTextPrimary : AppColors.textPrimary;
+    final mutedCol = effectiveDark ? AppColors.darkTextMuted : AppColors.textMuted;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          boxShadow: AppShadows.elevated,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 18),
+            // Glowing Tree Avatar
+            Container(
+              width: 76,
+              height: 76,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: tree.species.themeColor.withValues(alpha: 0.15),
+                border: Border.all(color: tree.species.themeColor, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: tree.species.themeColor.withValues(alpha: 0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Text(tree.species.iconEmoji, style: const TextStyle(fontSize: 38)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              tree.species.displayName,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: textCol,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              decoration: BoxDecoration(
+                color: tree.isMature
+                    ? AppColors.safeGreen.withValues(alpha: 0.15)
+                    : AppColors.amberWarm.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                tree.isMature ? '🌟 Full Bloom (Stage 5)' : '🌱 Growing (Stage ${tree.stage})',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: tree.isMature ? AppColors.safeGreen : AppColors.amberHoney,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            // Study Info
+            if (tree.subjectName.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: effectiveDark ? AppColors.darkCard : AppColors.warmCream.withValues(alpha: 0.6),
+                  borderRadius: AppRadius.roundedM,
+                  border: Border.all(color: effectiveDark ? AppColors.darkBorder : AppColors.borderSubtle),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildStatCol('${tree.focusMinutes}m', 'Focused', Icons.timer_outlined, textCol, mutedCol),
+                    _buildStatCol(tree.subjectName, 'Subject', Icons.book_outlined, textCol, mutedCol),
+                    _buildStatCol('+${tree.xpEarned} XP', 'Earned', Icons.stars_rounded, textCol, mutedCol),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+            // Action Buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      _openTreeDetails(tree);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: AppRadius.roundedM),
+                    ),
+                    child: Text('Inspect Tree', style: TextStyle(color: textCol)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      widget.onStartTimer();
+                    },
+                    icon: const Icon(Icons.timer_rounded),
+                    label: const Text('Study Again', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.deepForest,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: AppRadius.roundedM),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatCol(String val, String label, IconData icon, Color textCol, Color mutedCol) {
+    return Column(
+      children: [
+        Icon(icon, size: 16, color: AppColors.sageGreen),
+        const SizedBox(height: 4),
+        Text(val, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textCol)),
+        Text(label, style: TextStyle(fontSize: 10, color: mutedCol)),
+      ],
+    );
+  }
+
   void _showPlantSeedDialog(BuildContext context) {
     final syllabusProvider = Provider.of<SyllabusProvider>(context, listen: false);
     final subjects = syllabusProvider.subjects;
@@ -78,8 +252,10 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
         return StatefulBuilder(
           builder: (modalCtx, setModalState) {
             final isDark = Theme.of(sheetContext).brightness == Brightness.dark;
+            final cardBg = isDark ? AppColors.darkSurface : AppColors.cardSurface;
+            final textCol = isDark ? AppColors.darkTextPrimary : AppColors.textPrimary;
+            final borderCol = isDark ? AppColors.darkBorder : AppColors.borderSubtle;
 
-            // Chapters for current subject
             final currSubObj = subjects.firstWhere(
               (s) => s.name == selectedSubject,
               orElse: () => subjects.isNotEmpty ? subjects.first : subjects.first,
@@ -94,7 +270,7 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                 bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
               ),
               decoration: BoxDecoration(
-                color: isDark ? AppColors.darkSurface : AppColors.cardSurface,
+                color: cardBg,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 boxShadow: AppShadows.elevated,
               ),
@@ -118,20 +294,29 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(8),
-                          decoration: const BoxDecoration(
-                            color: AppColors.sageTint,
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkElevated : AppColors.sageTint,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.spa_rounded, color: AppColors.deepForest, size: 22),
+                          child: Icon(
+                            Icons.spa_rounded,
+                            color: isDark ? AppColors.sageLight : AppColors.deepForest,
+                            size: 22,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('Plant Seed in NavBloom', style: AppTypography.titleLarge),
+                            Text(
+                              'Plant Seed in Sanctuary',
+                              style: AppTypography.titleLarge.copyWith(color: textCol),
+                            ),
                             Text(
                               'Linked to CBSE Class 10 study session',
-                              style: AppTypography.bodySmall,
+                              style: AppTypography.bodySmall.copyWith(
+                                color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                              ),
                             ),
                           ],
                         ),
@@ -140,7 +325,10 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                     const SizedBox(height: 20),
 
                     // 1. Select Species
-                    Text('Select Tree Species', style: AppTypography.titleSmall),
+                    Text(
+                      'Select Tree Species',
+                      style: AppTypography.titleSmall.copyWith(color: textCol),
+                    ),
                     const SizedBox(height: 10),
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
@@ -154,12 +342,12 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
                                 color: isSel
-                                    ? species.themeColor.withValues(alpha: 0.15)
+                                    ? species.themeColor.withValues(alpha: 0.18)
                                     : (isDark ? AppColors.darkCard : AppColors.warmCream),
                                 borderRadius: AppRadius.roundedM,
                                 border: Border.all(
-                                  color: isSel ? species.themeColor : Colors.transparent,
-                                  width: 2,
+                                  color: isSel ? species.themeColor : borderCol,
+                                  width: isSel ? 2 : 1,
                                 ),
                               ),
                               child: Row(
@@ -172,8 +360,8 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                                       fontWeight: isSel ? FontWeight.bold : FontWeight.w500,
                                       fontSize: 13,
                                       color: isSel
-                                          ? (isDark ? Colors.white : AppColors.deepForest)
-                                          : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+                                          ? species.themeColor
+                                          : textCol,
                                     ),
                                   ),
                                 ],
@@ -187,25 +375,24 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                     const SizedBox(height: 18),
 
                     // 2. Select Subject
-                    Text('CBSE Subject', style: AppTypography.titleSmall),
+                    Text('CBSE Subject', style: AppTypography.titleSmall.copyWith(color: textCol)),
                     const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
                         color: isDark ? AppColors.darkCard : AppColors.ivoryCanvas,
                         borderRadius: AppRadius.roundedM,
-                        border: Border.all(
-                          color: isDark ? AppColors.darkBorder : AppColors.borderSubtle,
-                        ),
+                        border: Border.all(color: borderCol),
                       ),
                       child: DropdownButtonHideUnderline(
                         child: DropdownButton<String>(
                           value: selectedSubject,
                           isExpanded: true,
+                          dropdownColor: cardBg,
                           items: subjects.map((s) {
                             return DropdownMenuItem(
                               value: s.name,
-                              child: Text(s.name, style: AppTypography.bodyMedium),
+                              child: Text(s.name, style: TextStyle(color: textCol)),
                             );
                           }).toList(),
                           onChanged: (val) {
@@ -227,16 +414,14 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
 
                     // 3. Select Chapter
                     if (availableChapters.isNotEmpty) ...[
-                      Text('Chapter', style: AppTypography.titleSmall),
+                      Text('Chapter', style: AppTypography.titleSmall.copyWith(color: textCol)),
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12),
                         decoration: BoxDecoration(
                           color: isDark ? AppColors.darkCard : AppColors.ivoryCanvas,
                           borderRadius: AppRadius.roundedM,
-                          border: Border.all(
-                            color: isDark ? AppColors.darkBorder : AppColors.borderSubtle,
-                          ),
+                          border: Border.all(color: borderCol),
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
@@ -244,10 +429,11 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                                 ? selectedChapter
                                 : availableChapters.first,
                             isExpanded: true,
+                            dropdownColor: cardBg,
                             items: availableChapters.map((chap) {
                               return DropdownMenuItem(
                                 value: chap,
-                                child: Text(chap, style: AppTypography.bodyMedium),
+                                child: Text(chap, style: TextStyle(color: textCol)),
                               );
                             }).toList(),
                             onChanged: (val) {
@@ -261,8 +447,11 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                       const SizedBox(height: 14),
                     ],
 
-                    // 4. Planned Focus Minutes
-                    Text('Focus Session Duration: $focusMinutes min', style: AppTypography.titleSmall),
+                    // 4. Focus Duration
+                    Text(
+                      'Focus Session Duration: $focusMinutes min',
+                      style: AppTypography.titleSmall.copyWith(color: textCol),
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -271,9 +460,10 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                         return ChoiceChip(
                           label: Text('$mins m'),
                           selected: isSel,
-                          selectedColor: AppColors.deepForest,
+                          selectedColor: AppColors.sageGreen,
+                          backgroundColor: isDark ? AppColors.darkCard : AppColors.warmCream,
                           labelStyle: TextStyle(
-                            color: isSel ? Colors.white : (isDark ? Colors.white70 : Colors.black87),
+                            color: isSel ? Colors.white : textCol,
                             fontWeight: FontWeight.bold,
                           ),
                           onSelected: (selected) {
@@ -328,6 +518,7 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                             label: const Text('Plant Now'),
                             style: FilledButton.styleFrom(
                               backgroundColor: AppColors.deepForest,
+                              foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               shape: RoundedRectangleBorder(borderRadius: AppRadius.roundedL),
                             ),
@@ -351,6 +542,16 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
     final forest = context.watch<ForestProvider>();
     final effectiveDark = forest.isMoonlitNight || themeIsDark;
 
+    final filteredTrees = _filterTrees(forest.trees);
+    final filteredFocusMins = filteredTrees.fold<int>(0, (sum, t) => sum + t.focusMinutes);
+    final focusHours = filteredFocusMins ~/ 60;
+    final focusRemMins = filteredFocusMins % 60;
+    final focusTimeStr = focusHours > 0 ? '${focusHours}h ${focusRemMins}m' : '${focusRemMins}m';
+
+    final textPrimary = effectiveDark ? AppColors.darkTextPrimary : AppColors.textPrimary;
+    final textMuted = effectiveDark ? AppColors.darkTextMuted : AppColors.textMuted;
+    final iconColor = effectiveDark ? AppColors.sageLight : AppColors.deepForest;
+
     return Scaffold(
       backgroundColor: effectiveDark ? AppColors.darkCanvas : AppColors.ivoryCanvas,
       body: Stack(
@@ -367,10 +568,15 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                       painter: StorybookForestPainter(isDark: effectiveDark),
                     ),
 
+                    // Ambient Floating Cherry Petals / Bioluminescent Fireflies
+                    Positioned.fill(
+                      child: ForestParticlesOverlay(isMoonlit: effectiveDark),
+                    ),
+
                     // Equipped Sanctuary Decorations Placed in Meadow
                     ...forest.equippedDecorations.map((dec) {
                       final left = (constraints.maxWidth * dec.xRatio - 18).clamp(8.0, constraints.maxWidth - 44);
-                      final top = (constraints.maxHeight * dec.yRatio - 18).clamp(80.0, constraints.maxHeight - 120);
+                      final top = (constraints.maxHeight * dec.yRatio - 18).clamp(110.0, constraints.maxHeight - 160);
 
                       return Positioned(
                         left: left,
@@ -391,40 +597,51 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                     }),
 
                     // Interactive Tree Pins Placed in Sanctuary
-                    ...forest.trees.map((tree) {
-                      final left = (constraints.maxWidth * tree.xRatio - 32).clamp(10.0, constraints.maxWidth - 74);
-                      final top = (constraints.maxHeight * tree.yRatio - 44).clamp(90.0, constraints.maxHeight - 160);
+                    ...filteredTrees.map((tree) {
+                      final left = (constraints.maxWidth * tree.xRatio - 32).clamp(12.0, constraints.maxWidth - 76);
+                      final top = (constraints.maxHeight * tree.yRatio - 44).clamp(120.0, constraints.maxHeight - 180);
 
                       return Positioned(
                         left: left,
                         top: top,
                         child: GestureDetector(
-                          onTap: () => _openTreeDetails(tree),
+                          onTap: () => _showTreeInspectSheet(tree),
                           child: _buildTreePin(tree, effectiveDark),
                         ),
                       );
                     }),
 
-                    // Empty Sanctuary Prompt if no trees yet
-                    if (forest.trees.isEmpty)
+                    // Empty Sanctuary Prompt if no trees yet for this timeframe
+                    if (filteredTrees.isEmpty)
                       Center(
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                          margin: const EdgeInsets.symmetric(horizontal: 32),
+                          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
                           decoration: BoxDecoration(
-                            color: (effectiveDark ? AppColors.darkCard : Colors.white).withValues(alpha: 0.9),
+                            color: (effectiveDark ? AppColors.darkCard : Colors.white).withValues(alpha: 0.92),
                             borderRadius: AppRadius.roundedL,
+                            border: Border.all(
+                              color: effectiveDark ? AppColors.darkBorder : AppColors.borderSubtle,
+                            ),
                             boxShadow: AppShadows.softCard,
                           ),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text('🌱', style: TextStyle(fontSize: 32)),
+                              const Text('🌱', style: TextStyle(fontSize: 34)),
                               const SizedBox(height: 6),
-                              Text('Your sanctuary is waiting!', style: AppTypography.titleMedium),
-                              const SizedBox(height: 2),
                               Text(
-                                "Tap 'Plant' below to start your CBSE focus tree.",
-                                style: AppTypography.bodySmall,
+                                'Sanctuary is Blooming',
+                                style: AppTypography.titleMedium.copyWith(
+                                  color: textPrimary,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Tap "Plant & Focus" below to grow your first CBSE tree.',
+                                textAlign: TextAlign.center,
+                                style: AppTypography.bodySmall.copyWith(color: textMuted),
                               ),
                             ],
                           ),
@@ -436,78 +653,122 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
             ),
           ),
 
-          // 2. Top Header Bar (Level, XP, Coins, Profile)
+          // 2. Top Header & Forest App Timeline Filter
           Positioned(
             top: 0,
             left: 0,
             right: 0,
             child: SafeArea(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                child: Row(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
+                    // Level, XP, Coins, Profile
+                    Row(
                       children: [
-                        Text(
-                          'NavBloom',
-                          style: AppTypography.titleLarge.copyWith(
-                            color: effectiveDark ? Colors.white : AppColors.textPrimary,
-                            fontWeight: FontWeight.w800,
-                          ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'NavBloom',
+                              style: AppTypography.titleLarge.copyWith(
+                                color: textPrimary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            Text(
+                              effectiveDark ? 'Moonlit Sanctuary' : 'Whispering Meadow',
+                              style: AppTypography.bodySmall.copyWith(
+                                color: textMuted,
+                              ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          effectiveDark ? 'Moonlit Sanctuary' : 'Whispering Meadow',
-                          style: AppTypography.bodySmall.copyWith(
-                            color: effectiveDark ? AppColors.darkTextMuted : AppColors.textMuted,
-                          ),
+                        const Spacer(),
+                        _buildPill(
+                          Icons.monetization_on_rounded,
+                          '${forest.userCoins}',
+                          AppColors.coinGold,
+                          effectiveDark,
+                        ),
+                        const SizedBox(width: 8),
+                        _buildPill(
+                          Icons.stars_rounded,
+                          '${forest.userXp}',
+                          AppColors.amberWarm,
+                          effectiveDark,
+                        ),
+                        const SizedBox(width: 8),
+                        _buildPill(
+                          Icons.shield_rounded,
+                          'Lv. ${forest.userLevel}',
+                          AppColors.sageGreen,
+                          effectiveDark,
                         ),
                       ],
                     ),
-                    const Spacer(),
-                    _buildPill(
-                      Icons.monetization_on_rounded,
-                      '${forest.userCoins}',
-                      AppColors.coinGold,
-                      effectiveDark,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildPill(
-                      Icons.stars_rounded,
-                      '${forest.userXp}',
-                      AppColors.amberWarm,
-                      effectiveDark,
-                    ),
-                    const SizedBox(width: 8),
-                    _buildPill(
-                      Icons.shield_rounded,
-                      'Lv. ${forest.userLevel}',
-                      AppColors.sageGreen,
-                      effectiveDark,
-                    ),
-                    const SizedBox(width: 10),
-                    // Profile Avatar
+
+                    const SizedBox(height: 10),
+
+                    // Forest App Signature Timeline Filter Bar: [Today] [Week] [Month] [Year]
                     Container(
-                      width: 36,
-                      height: 36,
+                      padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: AppColors.sageTint,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 1.5),
+                        color: (effectiveDark ? AppColors.darkCard : AppColors.cardSurface)
+                            .withValues(alpha: 0.92),
+                        borderRadius: AppRadius.roundedFull,
+                        border: Border.all(
+                          color: effectiveDark ? AppColors.darkBorder : AppColors.borderSubtle,
+                        ),
                         boxShadow: AppShadows.softCard,
                       ),
-                      child: Center(
-                        child: Text(
-                          forest.userProfile?.displayName.isNotEmpty == true
-                              ? forest.userProfile!.displayName[0].toUpperCase()
-                              : 'S',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.deepForest,
+                      child: Row(
+                        children: [
+                          _buildTimelineTab('Today', ForestTimelineFilter.today, effectiveDark),
+                          _buildTimelineTab('Week', ForestTimelineFilter.week, effectiveDark),
+                          _buildTimelineTab('Month', ForestTimelineFilter.month, effectiveDark),
+                          _buildTimelineTab('All Time', ForestTimelineFilter.allTime, effectiveDark),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 6),
+
+                    // Filtered Stats Ribbon
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: (effectiveDark ? AppColors.darkSurface : AppColors.sageTint)
+                            .withValues(alpha: 0.85),
+                        borderRadius: AppRadius.roundedFull,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.park_rounded, size: 13, color: AppColors.sageGreen),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${filteredTrees.length} Trees',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: textPrimary,
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 10),
+                          Icon(Icons.timer_outlined, size: 13, color: AppColors.amberHoney),
+                          const SizedBox(width: 4),
+                          Text(
+                            focusTimeStr,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: textPrimary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
@@ -519,13 +780,13 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
           // 3. Floating Left Quick Action Pills: [Map], [Journal], [Tasks]
           Positioned(
             left: 16,
-            top: 130,
+            top: 155,
             child: Column(
               children: [
                 _buildQuickActionBtn(Icons.explore_rounded, 'Map', _openMap, effectiveDark),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _buildQuickActionBtn(Icons.menu_book_rounded, 'Journal', _openJournal, effectiveDark),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 _buildQuickActionBtn(Icons.emoji_events_rounded, 'Tasks', _openAchievements, effectiveDark),
               ],
             ),
@@ -539,7 +800,7 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Today's Growth Bar
+                // Quick Plant & Focus Launch Bar
                 GestureDetector(
                   onTap: () => _showPlantSeedDialog(context),
                   child: Container(
@@ -558,11 +819,11 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                       children: [
                         Container(
                           padding: const EdgeInsets.all(6),
-                          decoration: const BoxDecoration(
-                            color: AppColors.sageTint,
+                          decoration: BoxDecoration(
+                            color: effectiveDark ? AppColors.darkElevated : AppColors.sageTint,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.park_rounded, color: AppColors.deepForest, size: 18),
+                          child: Icon(Icons.park_rounded, color: iconColor, size: 18),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -571,15 +832,15 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                "Today's Sanctuary Growth",
+                                "Plant & Grow Forest Tree",
                                 style: AppTypography.titleSmall.copyWith(
-                                  color: effectiveDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                                  color: textPrimary,
                                 ),
                               ),
                               Text(
                                 '${forest.totalFocusMinutes}m focused • ${forest.matureTreesCount}/${forest.totalTreesCount} mature trees',
                                 style: AppTypography.bodySmall.copyWith(
-                                  color: effectiveDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                                  color: textMuted,
                                 ),
                               ),
                             ],
@@ -612,14 +873,16 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
                         'Plant',
                         () => _showPlantSeedDialog(context),
                         true,
+                        effectiveDark,
                       ),
-                      _buildDockItem(Icons.park_rounded, 'Trees', _openMap, false),
-                      _buildDockItem(Icons.palette_rounded, 'Decorations', _openDecorations, false),
+                      _buildDockItem(Icons.park_rounded, 'Trees', _openMap, false, effectiveDark),
+                      _buildDockItem(Icons.palette_rounded, 'Decorations', _openDecorations, false, effectiveDark),
                       _buildDockItem(
                         effectiveDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
                         effectiveDark ? 'Sunlight' : 'Moonlight',
                         () => forest.toggleMoonlitMode(),
                         false,
+                        effectiveDark,
                       ),
                     ],
                   ),
@@ -628,6 +891,34 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineTab(String label, ForestTimelineFilter filter, bool isDark) {
+    final isSelected = _selectedFilter == filter;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedFilter = filter),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? AppColors.sageGreen : Colors.transparent,
+            borderRadius: AppRadius.roundedFull,
+          ),
+          child: Center(
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                color: isSelected
+                    ? Colors.white
+                    : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -675,7 +966,7 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 20, color: AppColors.deepForest),
+            Icon(icon, size: 20, color: isDark ? AppColors.sageLight : AppColors.deepForest),
             const SizedBox(height: 2),
             Text(
               label,
@@ -691,7 +982,7 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
     );
   }
 
-  Widget _buildDockItem(IconData icon, String label, VoidCallback onTap, bool isPrimary) {
+  Widget _buildDockItem(IconData icon, String label, VoidCallback onTap, bool isPrimary, bool isDark) {
     return GestureDetector(
       onTap: onTap,
       child: Padding(
@@ -702,19 +993,27 @@ class _NavBloomScreenState extends State<NavBloomScreen> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: isPrimary ? AppColors.deepForest : AppColors.sageTint,
+                color: isPrimary
+                    ? AppColors.deepForest
+                    : (isDark ? AppColors.darkElevated : AppColors.sageTint),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 icon,
                 size: 20,
-                color: isPrimary ? Colors.white : AppColors.deepForest,
+                color: isPrimary
+                    ? Colors.white
+                    : (isDark ? AppColors.sageLight : AppColors.deepForest),
               ),
             ),
             const SizedBox(height: 4),
             Text(
               label,
-              style: AppTypography.labelSmall.copyWith(fontSize: 10),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+              ),
             ),
           ],
         ),

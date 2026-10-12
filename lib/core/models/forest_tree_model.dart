@@ -75,6 +75,7 @@ class ForestTreeModel {
   }
 
   bool get isMatured => stage >= 5;
+  bool get isMature => isMatured;
 
   Map<String, dynamic> toMap() {
     return {

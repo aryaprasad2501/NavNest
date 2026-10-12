@@ -78,10 +78,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) {
+        final isDark = Theme.of(sheetCtx).brightness == Brightness.dark;
+        final cardBg = isDark ? AppColors.darkSurface : Colors.white;
+        final textCol = isDark ? AppColors.darkTextPrimary : Colors.black87;
+        final mutedCol = isDark ? AppColors.darkTextMuted : Colors.black54;
+
+        if (auth.currentUser?.displayName.isNotEmpty == true) {
+          nameController.text = auth.currentUser!.displayName;
+        }
+
         return Container(
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
           padding: EdgeInsets.only(
             left: 24,
@@ -98,142 +107,89 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade300,
+                    color: Colors.grey.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
               ),
               const SizedBox(height: 16),
               Row(
-                children: const [
-                  GoogleLogo(size: 26),
-                  SizedBox(width: 12),
+                children: [
+                  const GoogleLogo(size: 26),
+                  const SizedBox(width: 12),
                   Text(
-                    'Sign in with Google',
+                    'Connect Google Account',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: Colors.black87,
+                      color: textCol,
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Choose a Google account to synchronize your Class 10th CBSE syllabus, study records, and NavBloom sanctuary.',
-                style: TextStyle(fontSize: 13, color: Colors.black54, height: 1.3),
+              Text(
+                'Synchronize your 6 CBSE Class 10 subjects, study streak, and NavBloom sanctuary with Google Cloud.',
+                style: TextStyle(fontSize: 13, color: mutedCol, height: 1.3),
               ),
               const SizedBox(height: 20),
-              _buildAccountOption(
-                name: 'Aarav Sharma',
-                email: 'aarav.cbse2027@gmail.com',
-                tag: 'CBSE 2027 Student',
-                onTap: () async {
-                  Navigator.pop(sheetCtx);
-                  await auth.linkGoogleAccount(
-                    displayName: 'Aarav Sharma',
-                    email: 'aarav.cbse2027@gmail.com',
-                  );
-                  if (auth.currentUser != null) {
-                    forest.updateUserProfile(auth.currentUser!);
-                  }
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Linked Google account: aarav.cbse2027@gmail.com ✓'),
-                        backgroundColor: AppColors.deepForest,
-                      ),
-                    );
-                  }
-                },
+              TextField(
+                controller: nameController,
+                style: TextStyle(color: textCol),
+                decoration: const InputDecoration(
+                  labelText: 'Student Full Name',
+                  hintText: 'e.g. Aryan Sharma',
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
               ),
-              const SizedBox(height: 10),
-              _buildAccountOption(
-                name: 'Priya Patel',
-                email: 'priya.patel.boards@gmail.com',
-                tag: 'Class 10 Scholar',
-                onTap: () async {
-                  Navigator.pop(sheetCtx);
-                  await auth.linkGoogleAccount(
-                    displayName: 'Priya Patel',
-                    email: 'priya.patel.boards@gmail.com',
-                  );
-                  if (auth.currentUser != null) {
-                    forest.updateUserProfile(auth.currentUser!);
-                  }
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Linked Google account: priya.patel.boards@gmail.com ✓'),
-                        backgroundColor: AppColors.deepForest,
-                      ),
-                    );
-                  }
-                },
+              const SizedBox(height: 12),
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                style: TextStyle(color: textCol),
+                decoration: const InputDecoration(
+                  labelText: 'Google Email Address',
+                  hintText: 'student@gmail.com',
+                  prefixIcon: Icon(Icons.email_outlined),
+                ),
               ),
-              const SizedBox(height: 16),
-              const Divider(),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.deepForest,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  icon: const Icon(Icons.cloud_upload_outlined),
+                  label: const Text('Connect & Sync with Google'),
+                  onPressed: () async {
+                    final email = emailController.text.trim();
+                    final name = nameController.text.trim();
+                    if (email.isNotEmpty && email.contains('@')) {
+                      Navigator.pop(sheetCtx);
+                      await auth.linkGoogleAccount(
+                        displayName: name.isNotEmpty ? name : 'CBSE Student',
+                        email: email,
+                      );
+                      if (auth.currentUser != null) {
+                        forest.updateUserProfile(auth.currentUser!);
+                      }
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Linked Google account: $email ✓'),
+                            backgroundColor: AppColors.deepForest,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
               const SizedBox(height: 8),
-              ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                leading: const Icon(Icons.add_circle_outline, color: AppColors.deepForest),
-                title: const Text('Use another Google Account', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                children: [
-                  TextField(
-                    controller: nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Your Full Name',
-                      hintText: 'e.g. Rahul Verma',
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: const InputDecoration(
-                      labelText: 'Google Email Address',
-                      hintText: 'student@gmail.com',
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.deepForest,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      icon: const Icon(Icons.cloud_upload_outlined),
-                      label: const Text('Connect & Sync'),
-                      onPressed: () async {
-                        final email = emailController.text.trim();
-                        final name = nameController.text.trim();
-                        if (email.isNotEmpty && email.contains('@')) {
-                          Navigator.pop(sheetCtx);
-                          await auth.linkGoogleAccount(
-                            displayName: name.isNotEmpty ? name : 'CBSE Student',
-                            email: email,
-                          );
-                          if (auth.currentUser != null) {
-                            forest.updateUserProfile(auth.currentUser!);
-                          }
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Linked Google account: $email ✓'),
-                                backgroundColor: AppColors.deepForest,
-                              ),
-                            );
-                          }
-                        }
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
             ],
           ),
         );
@@ -241,60 +197,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildAccountOption({
-    required String name,
-    required String email,
-    required String tag,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.grey.shade200),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            CircleAvatar(
-              backgroundColor: AppColors.sageTint,
-              radius: 18,
-              child: Text(
-                name[0],
-                style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.deepForest),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.warmCream,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(tag, style: const TextStyle(fontSize: 10, color: AppColors.deepForest, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  Text(email, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                ],
-              ),
-            ),
-            const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
-          ],
-        ),
-      ),
-    );
-  }
 
   void _showSignOutDialog() {
     final auth = context.read<AuthService>();

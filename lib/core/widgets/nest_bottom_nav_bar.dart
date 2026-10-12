@@ -16,11 +16,16 @@ class NestBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.cardSurface,
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.cardSurface,
         border: Border(
-          top: BorderSide(color: AppColors.borderSubtle, width: 1),
+          top: BorderSide(
+            color: isDark ? AppColors.darkBorder : AppColors.borderSubtle,
+            width: 1,
+          ),
         ),
         boxShadow: AppShadows.bottomNav,
       ),
@@ -35,26 +40,31 @@ class NestBottomNavBar extends StatelessWidget {
                 index: 0,
                 icon: Icons.home_rounded,
                 label: 'Home',
+                isDark: isDark,
               ),
               _buildNavItem(
                 index: 1,
                 icon: Icons.park_rounded,
                 label: 'NavBloom',
+                isDark: isDark,
               ),
               _buildNavItem(
                 index: 2,
                 icon: Icons.calendar_month_rounded,
                 label: 'Planner',
+                isDark: isDark,
               ),
               _buildNavItem(
                 index: 3,
                 icon: Icons.menu_book_rounded,
                 label: 'Syllabus',
+                isDark: isDark,
               ),
               _buildNavItem(
                 index: 4,
                 icon: Icons.favorite_rounded,
                 label: 'Shared',
+                isDark: isDark,
               ),
             ],
           ),
@@ -67,8 +77,14 @@ class NestBottomNavBar extends StatelessWidget {
     required int index,
     required IconData icon,
     required String label,
+    required bool isDark,
   }) {
     final isSelected = currentIndex == index;
+    final selectedIconColor = isDark ? AppColors.sageLight : AppColors.deepForest;
+    final unselectedColor = isDark ? AppColors.darkTextMuted : AppColors.textMuted;
+    final selectedBg = isDark
+        ? AppColors.forestEmerald.withValues(alpha: 0.25)
+        : AppColors.sageTint;
 
     return Expanded(
       child: GestureDetector(
@@ -88,20 +104,20 @@ class NestBottomNavBar extends StatelessWidget {
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 4.0),
                 decoration: BoxDecoration(
-                  color: isSelected ? AppColors.sageTint : Colors.transparent,
+                  color: isSelected ? selectedBg : Colors.transparent,
                   borderRadius: AppRadius.roundedFull,
                 ),
                 child: Icon(
                   icon,
                   size: 22,
-                  color: isSelected ? AppColors.deepForest : AppColors.textMuted,
+                  color: isSelected ? selectedIconColor : unselectedColor,
                 ),
               ),
               const SizedBox(height: 3),
               Text(
                 label,
                 style: AppTypography.labelSmall.copyWith(
-                  color: isSelected ? AppColors.deepForest : AppColors.textMuted,
+                  color: isSelected ? selectedIconColor : unselectedColor,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 ),
                 maxLines: 1,

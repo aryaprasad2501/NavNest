@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:navnest/app.dart';
 import 'package:navnest/core/database/database_helper.dart';
@@ -8,6 +9,7 @@ import 'package:navnest/core/models/subject_model.dart';
 import 'package:navnest/core/models/subtopic_model.dart';
 import 'package:navnest/core/models/topic_status.dart';
 import 'package:navnest/core/services/auth_service.dart';
+import 'package:navnest/core/services/local_storage_service.dart';
 import 'package:navnest/core/services/theme_service.dart';
 import 'package:navnest/features/planner/presentation/providers/planner_provider.dart';
 import 'package:navnest/features/syllabus/presentation/providers/syllabus_provider.dart';
@@ -18,6 +20,9 @@ import 'package:navnest/features/navbloom/presentation/providers/forest_provider
 
 void main() {
   testWidgets('NavNestApp initial shell and navigation smoke test matching mockup', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'navnest_is_first_launch': false});
+    final localStorage = await LocalStorageService.init();
+
     final now = DateTime.now();
 
     final testSubjects = [
@@ -127,6 +132,7 @@ void main() {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
+          Provider<LocalStorageService>.value(value: localStorage),
           ChangeNotifierProvider<ThemeService>.value(value: themeService),
           ChangeNotifierProvider<AuthService>.value(value: authService),
           ChangeNotifierProvider<SyllabusProvider>.value(value: syllabusProvider),
@@ -138,8 +144,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // 1. Verify Home Dashboard elements (Mockup Screen 4)
-    expect(find.text('Aditi 🌸'), findsOneWidget);
+    // 1. Verify Home Dashboard elements
+    expect(find.text('Good Morning'), findsOneWidget);
+    expect(find.text('Student 🌿'), findsOneWidget);
     expect(find.text('Day Streak'), findsOneWidget);
     expect(find.text("Today's Progress"), findsOneWidget);
     expect(find.text('Upcoming Exams'), findsOneWidget);
@@ -151,7 +158,7 @@ void main() {
     expect(find.text('Syllabus'), findsOneWidget);
     expect(find.text('Shared'), findsOneWidget);
 
-    // 2. Tap NavBloom tab (Mockup Screen 10)
+    // 2. Tap NavBloom tab
     await tester.tap(find.text('NavBloom'));
     await tester.pumpAndSettle();
 
@@ -160,7 +167,7 @@ void main() {
     expect(find.text('Map'), findsOneWidget);
     expect(find.text('Journal'), findsOneWidget);
     expect(find.text('Tasks'), findsOneWidget);
-    expect(find.text("Today's Sanctuary Growth"), findsOneWidget);
+    expect(find.text('Plant & Grow Forest Tree'), findsOneWidget);
 
     // 3. Tap Planner tab (Mockup Screen 7)
     await tester.tap(find.text('Planner'));

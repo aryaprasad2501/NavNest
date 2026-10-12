@@ -2,17 +2,18 @@ import 'package:flutter/material.dart';
 import 'app_colors.dart';
 
 /// Clean, humanist typography system for NavNest.
+/// Base styles omit fixed dark colors so text dynamically respects
+/// both Daylight Cream and Moonlit Forest dark mode.
 class AppTypography {
   AppTypography._();
 
-  static const String fontFamily = 'Roboto'; // Clean system default
+  static const String fontFamily = 'Roboto';
 
   static const TextStyle displayLarge = TextStyle(
     fontSize: 32,
     fontWeight: FontWeight.w700,
     letterSpacing: -0.8,
     height: 1.2,
-    color: AppColors.textPrimary,
   );
 
   static const TextStyle displayMedium = TextStyle(
@@ -20,7 +21,6 @@ class AppTypography {
     fontWeight: FontWeight.w700,
     letterSpacing: -0.5,
     height: 1.25,
-    color: AppColors.textPrimary,
   );
 
   static const TextStyle titleLarge = TextStyle(
@@ -28,7 +28,6 @@ class AppTypography {
     fontWeight: FontWeight.w600,
     letterSpacing: -0.3,
     height: 1.3,
-    color: AppColors.textPrimary,
   );
 
   static const TextStyle titleMedium = TextStyle(
@@ -36,7 +35,6 @@ class AppTypography {
     fontWeight: FontWeight.w600,
     letterSpacing: -0.1,
     height: 1.35,
-    color: AppColors.textPrimary,
   );
 
   static const TextStyle titleSmall = TextStyle(
@@ -44,7 +42,6 @@ class AppTypography {
     fontWeight: FontWeight.w600,
     letterSpacing: 0.0,
     height: 1.4,
-    color: AppColors.textPrimary,
   );
 
   static const TextStyle bodyLarge = TextStyle(
@@ -52,7 +49,6 @@ class AppTypography {
     fontWeight: FontWeight.w400,
     letterSpacing: 0.1,
     height: 1.45,
-    color: AppColors.textSecondary,
   );
 
   static const TextStyle bodyMedium = TextStyle(
@@ -60,7 +56,6 @@ class AppTypography {
     fontWeight: FontWeight.w400,
     letterSpacing: 0.1,
     height: 1.45,
-    color: AppColors.textSecondary,
   );
 
   static const TextStyle bodySmall = TextStyle(
@@ -68,7 +63,6 @@ class AppTypography {
     fontWeight: FontWeight.w400,
     letterSpacing: 0.2,
     height: 1.4,
-    color: AppColors.textMuted,
   );
 
   static const TextStyle labelLarge = TextStyle(
@@ -76,7 +70,6 @@ class AppTypography {
     fontWeight: FontWeight.w600,
     letterSpacing: 0.3,
     height: 1.3,
-    color: AppColors.textPrimary,
   );
 
   static const TextStyle labelMedium = TextStyle(
@@ -84,7 +77,6 @@ class AppTypography {
     fontWeight: FontWeight.w600,
     letterSpacing: 0.4,
     height: 1.3,
-    color: AppColors.textMuted,
   );
 
   static const TextStyle labelSmall = TextStyle(
@@ -92,6 +84,26 @@ class AppTypography {
     fontWeight: FontWeight.w600,
     letterSpacing: 0.5,
     height: 1.2,
-    color: AppColors.textMuted,
   );
+
+  /// Helper to get theme-aware primary text color
+  static Color primaryColor(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? AppColors.darkTextPrimary
+        : AppColors.textPrimary;
+  }
+
+  /// Helper to get theme-aware secondary text color
+  static Color secondaryColor(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? AppColors.darkTextSecondary
+        : AppColors.textSecondary;
+  }
+
+  /// Helper to get theme-aware muted text color
+  static Color mutedColor(BuildContext context) {
+    return Theme.of(context).brightness == Brightness.dark
+        ? AppColors.darkTextMuted
+        : AppColors.textMuted;
+  }
 }

@@ -56,9 +56,9 @@ void main() {
     final retrieved = await dbHelper.getUserProfile('test_student_1');
     expect(retrieved, isNotNull);
     expect(retrieved!.displayName, equals('Student'));
-    expect(retrieved.streakDays, equals(1));
-    expect(retrieved.totalXp, equals(150));
-    expect(retrieved.coins, equals(40));
+    expect(retrieved.streakDays, equals(0));
+    expect(retrieved.totalXp, equals(0));
+    expect(retrieved.coins, equals(0));
 
     // Test updating profile
     final updated = retrieved.copyWith(totalXp: 300, coins: 80, streakDays: 2);

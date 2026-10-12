@@ -1743,6 +1743,39 @@ class DatabaseHelper {
     await db.delete('exams', where: 'id = ?', whereArgs: [examId]);
   }
 
+  /// Update an existing exam
+  Future<int> updateExam(ExamModel exam) async {
+    final db = await database;
+    return await db.update('exams', exam.toMap(), where: 'id = ?', whereArgs: [exam.id]);
+  }
+
+  /// Purge all dummy mock data so the student starts completely fresh
+  Future<void> purgeDummyDataAndStartFresh([Database? targetDb]) async {
+    final db = targetDb ?? await database;
+    await ensureForestTablesExist(db);
+    // Remove dummy trees
+    await db.delete('forest_trees');
+    // Remove dummy planner tasks
+    await db.delete('planner_tasks');
+    // Remove dummy study sessions
+    await db.delete('study_sessions');
+    // Remove dummy journal entries
+    await db.delete('forest_journal');
+    // Reset achievements progress
+    await db.update('achievements', {'progress': 0, 'isUnlocked': 0, 'unlockedAt': null});
+    // Reset decorations to locked and unequipped
+    await db.update('forest_decorations', {'isUnlocked': 0, 'isEquipped': 0});
+    // Reset user profile stats to clean slate (0 XP, 0 coins, 0 streak)
+    try {
+      await db.update('user_profiles', {
+        'streakDays': 0,
+        'bestStreak': 0,
+        'totalXp': 0,
+        'coins': 0,
+      });
+    } catch (_) {}
+  }
+
   // ==========================================
   // NAVBLOOM FOREST & GAMIFICATION OPERATIONS (Phase 4)
   // ==========================================

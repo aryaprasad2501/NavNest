@@ -277,6 +277,11 @@ class PlannerProvider extends ChangeNotifier {
     await loadExams();
   }
 
+  Future<void> updateExam(ExamModel exam) async {
+    await _dbHelper.updateExam(exam);
+    await loadExams();
+  }
+
   Future<void> deleteExam(String examId) async {
     await _dbHelper.deleteExam(examId);
     await loadExams();

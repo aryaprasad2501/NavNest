@@ -3,6 +3,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 
 /// Standard, beautifully styled card for NavNest.
+/// Automatically resolves to dark card background and subtle dark borders in dark mode.
 class NestCard extends StatelessWidget {
   final Widget child;
   final EdgeInsetsGeometry? padding;
@@ -25,17 +26,21 @@ class NestCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final defaultBg = isDark ? AppColors.darkCard : AppColors.cardSurface;
+    final defaultBorderColor = isDark ? AppColors.darkBorder : AppColors.borderSubtle;
+
     final cardContent = Container(
       width: width,
       height: height,
       padding: padding ?? AppSpacing.cardPadding,
       decoration: BoxDecoration(
-        color: color ?? AppColors.cardSurface,
+        color: color ?? defaultBg,
         borderRadius: AppRadius.roundedL,
         border: Border.fromBorderSide(
-          border ?? const BorderSide(color: AppColors.borderSubtle, width: 1),
+          border ?? BorderSide(color: defaultBorderColor, width: 1),
         ),
-        boxShadow: AppShadows.softCard,
+        boxShadow: isDark ? [] : AppShadows.softCard,
       ),
       child: child,
     );
@@ -46,8 +51,8 @@ class NestCard extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           borderRadius: AppRadius.roundedL,
-          splashColor: AppColors.sageTint.withValues(alpha: 0.5),
-          highlightColor: AppColors.sageTint.withValues(alpha: 0.2),
+          splashColor: (isDark ? AppColors.forestEmerald : AppColors.sageTint).withValues(alpha: 0.4),
+          highlightColor: (isDark ? AppColors.forestEmerald : AppColors.sageTint).withValues(alpha: 0.2),
           child: cardContent,
         ),
       );

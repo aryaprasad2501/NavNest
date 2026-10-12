@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'core/services/local_storage_service.dart';
 import 'core/services/theme_service.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/nest_bottom_nav_bar.dart';
 import 'features/focus/presentation/focus_screen.dart';
 import 'features/home/presentation/home_screen.dart';
 import 'features/navbloom/presentation/navbloom_screen.dart';
+import 'features/onboarding/presentation/onboarding_screen.dart';
 import 'features/planner/presentation/planner_screen.dart';
 import 'features/settings/presentation/settings_screen.dart';
 import 'features/shared_space/presentation/shared_space_screen.dart';
@@ -17,6 +19,7 @@ class NavNestApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeService = Provider.of<ThemeService>(context, listen: true);
+    final localStorage = Provider.of<LocalStorageService>(context, listen: false);
 
     return MaterialApp(
       title: 'NavNest',
@@ -24,7 +27,9 @@ class NavNestApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeService.themeMode,
-      home: const MainNavigationShell(),
+      home: localStorage.isFirstLaunch
+          ? const OnboardingScreen()
+          : const MainNavigationShell(),
     );
   }
 }

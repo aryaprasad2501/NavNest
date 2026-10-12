@@ -9,6 +9,7 @@ import '../../../core/widgets/nest_button.dart';
 import '../../../core/widgets/nest_card.dart';
 import '../../../core/widgets/nest_progress_bar.dart';
 import 'chapter_subtopics_screen.dart';
+import '../../planner/presentation/providers/planner_provider.dart';
 import 'providers/syllabus_provider.dart';
 
 class SyllabusScreen extends StatefulWidget {
@@ -88,7 +89,9 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
                           color: colorVal,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: isChosen ? Colors.black87 : Colors.transparent,
+                            color: isChosen
+                                ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87)
+                                : Colors.transparent,
                             width: 2.5,
                           ),
                         ),
@@ -171,7 +174,9 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
                           color: colorVal,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: isChosen ? Colors.black87 : Colors.transparent,
+                            color: isChosen
+                                ? (Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87)
+                                : Colors.transparent,
                             width: 2.5,
                           ),
                         ),
@@ -318,7 +323,7 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
               child: Row(
                 children: [
                   _buildTab('Subjects (${provider.subjects.length})', 0, isDark),
-                  _buildTab('Exams (2)', 1, isDark),
+                  _buildTab('Exams (${context.watch<PlannerProvider>().exams.length})', 1, isDark),
                 ],
               ),
             ),
@@ -446,7 +451,9 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? AppColors.deepForest : Colors.transparent,
+            color: isSelected
+                ? (isDark ? AppColors.forestEmerald : AppColors.deepForest)
+                : Colors.transparent,
             borderRadius: AppRadius.roundedFull,
           ),
           child: Center(

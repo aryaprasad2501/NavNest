@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'core/database/database_helper.dart';
 import 'core/services/auth_service.dart';
+import 'core/services/local_storage_service.dart';
 import 'core/services/theme_service.dart';
 import 'features/navbloom/presentation/providers/forest_provider.dart';
 import 'features/planner/presentation/providers/planner_provider.dart';
@@ -11,11 +12,18 @@ import 'features/syllabus/presentation/providers/syllabus_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  final localStorage = await LocalStorageService.init();
+
   // Initialize offline database, auth service, theme service, syllabus, planner, and forest
   final dbHelper = DatabaseHelper.instance;
   await dbHelper.seedInitialSyllabus();
   await dbHelper.seedInitialPlannerData();
   await dbHelper.seedInitialForestData();
+
+  // If first launch, purge all dummy records so student starts fresh
+  if (localStorage.isFirstLaunch) {
+    await dbHelper.purgeDummyDataAndStartFresh();
+  }
 
   final authService = AuthService(dbHelper: dbHelper);
   await authService.initialize();
@@ -35,6 +43,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        Provider<LocalStorageService>.value(value: localStorage),
         ChangeNotifierProvider<AuthService>.value(value: authService),
         ChangeNotifierProvider<ThemeService>.value(value: themeService),
         ChangeNotifierProvider<SyllabusProvider>.value(value: syllabusProvider),

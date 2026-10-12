@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../../core/models/exam_model.dart';
 import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -9,6 +10,7 @@ import '../../../core/widgets/nest_card.dart';
 import '../../../core/widgets/nest_progress_bar.dart';
 import '../../navbloom/presentation/providers/forest_provider.dart';
 import '../../planner/presentation/providers/planner_provider.dart';
+import '../../planner/presentation/widgets/exam_editor_sheet.dart';
 
 class HomeScreen extends StatelessWidget {
   final VoidCallback onOpenFocus;
@@ -24,6 +26,15 @@ class HomeScreen extends StatelessWidget {
     required this.onOpenSettings,
   });
 
+  void _openExamEditor(BuildContext context, [ExamModel? examToEdit]) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => ExamEditorSheet(initialExamToEdit: examToEdit),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -37,10 +48,13 @@ class HomeScreen extends StatelessWidget {
     final user = auth?.currentUser ?? forest.userProfile;
     final displayName = (user?.displayName.isNotEmpty == true && user!.displayName != 'Student')
         ? user.displayName
-        : 'Aditi 🌸';
+        : 'Student 🌿';
     final photoUrl = user?.photoUrl;
     final isGoogleLinked = auth?.isGoogleLinked ?? false;
     final avatarLetter = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'S';
+
+    final textPrimary = isDark ? AppColors.darkTextPrimary : AppColors.textPrimary;
+    final iconColor = isDark ? AppColors.sageLight : AppColors.deepForest;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkCanvas : AppColors.ivoryCanvas,
@@ -84,7 +98,7 @@ class HomeScreen extends StatelessWidget {
                 Text(
                   displayName,
                   style: AppTypography.titleLarge.copyWith(
-                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                    color: textPrimary,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -100,10 +114,10 @@ class HomeScreen extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: AppColors.sageTint,
+                color: isDark ? AppColors.darkSurface : AppColors.sageTint,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isGoogleLinked ? AppColors.safeGreen : Colors.white,
+                  color: isGoogleLinked ? AppColors.safeGreen : (isDark ? AppColors.darkBorder : Colors.white),
                   width: 1.5,
                 ),
                 boxShadow: AppShadows.softCard,
@@ -115,14 +129,18 @@ class HomeScreen extends StatelessWidget {
                   ? Center(
                       child: Text(
                         avatarLetter,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.deepForest),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: iconColor,
+                        ),
                       ),
                     )
                   : null,
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.settings_outlined, color: AppColors.deepForest),
+            icon: Icon(Icons.settings_outlined, color: iconColor),
             tooltip: 'Settings',
             onPressed: onOpenSettings,
           ),
@@ -149,8 +167,8 @@ class HomeScreen extends StatelessWidget {
 
             const SizedBox(height: AppSpacing.l),
 
-            // Upcoming Exams
-            _buildUpcomingExamsCard(isDark, planner),
+            // Upcoming Exams with Full CRUD
+            _buildUpcomingExamsCard(context, isDark, planner),
 
             const SizedBox(height: AppSpacing.l),
 
@@ -262,7 +280,12 @@ class HomeScreen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Today's Progress", style: AppTypography.titleMedium),
+              Text(
+                "Today's Progress",
+                style: AppTypography.titleMedium.copyWith(
+                  color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                ),
+              ),
               NestBadge(
                 label: progress >= 0.5 ? 'On Track' : 'Focus Today',
                 variant: progress >= 0.5 ? NestBadgeVariant.safeGreen : NestBadgeVariant.amber,
@@ -293,7 +316,7 @@ class HomeScreen extends StatelessWidget {
                     ),
                     Text(
                       'of ${targetHours}h',
-                      style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                      style: TextStyle(fontSize: 10, color: isDark ? AppColors.darkTextMuted : AppColors.textMuted),
                     ),
                   ],
                 ),
@@ -317,10 +340,14 @@ class HomeScreen extends StatelessWidget {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: AppColors.sageTint,
+                          color: isDark ? AppColors.darkElevated : AppColors.sageTint,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.cottage_rounded, color: AppColors.deepForest, size: 24),
+                        child: Icon(
+                          Icons.cottage_rounded,
+                          color: isDark ? AppColors.sageLight : AppColors.deepForest,
+                          size: 24,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -339,7 +366,10 @@ class HomeScreen extends StatelessWidget {
                             const SizedBox(height: 2),
                             Text(
                               '${forest.matureTreesCount} reached Full Bloom',
-                              style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                              ),
                             ),
                           ],
                         ),
@@ -355,83 +385,184 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildUpcomingExamsCard(bool isDark, PlannerProvider planner) {
+  Widget _buildUpcomingExamsCard(BuildContext context, bool isDark, PlannerProvider planner) {
     final exams = planner.exams;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Upcoming Exams', style: AppTypography.titleMedium),
-        const SizedBox(height: AppSpacing.m),
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: _buildExamPill(
-                exams.isNotEmpty ? exams.first.title : 'Physics',
-                exams.isNotEmpty ? '${exams.first.daysRemaining} days left' : '20 days left',
-                AppColors.subjectPhysics,
-                isDark,
+            Text(
+              'Upcoming Exams',
+              style: AppTypography.titleMedium.copyWith(
+                color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
               ),
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildExamPill(
-                exams.length > 1 ? exams[1].title : 'Chemistry',
-                exams.length > 1 ? '${exams[1].daysRemaining} days left' : '52 days left',
-                AppColors.subjectChemistry,
-                isDark,
+            TextButton.icon(
+              onPressed: () => _openExamEditor(context),
+              icon: Icon(
+                Icons.add_rounded,
+                size: 16,
+                color: isDark ? AppColors.sageLight : AppColors.deepForest,
+              ),
+              label: Text(
+                'Manage',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? AppColors.sageLight : AppColors.deepForest,
+                ),
               ),
             ),
           ],
         ),
-      ],
-    );
-  }
+        const SizedBox(height: 8),
+        if (exams.isEmpty)
+          GestureDetector(
+            onTap: () => _openExamEditor(context),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+                borderRadius: AppRadius.roundedL,
+                border: Border.all(
+                  color: isDark ? AppColors.darkBorder : AppColors.borderSubtle,
+                  style: BorderStyle.solid,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkSurface : AppColors.sageTint,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.add_task_rounded,
+                      color: isDark ? AppColors.sageLight : AppColors.deepForest,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'No Target Exams Added Yet',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          'Tap here to add CBSE Boards, Pre-Boards, or Unit Tests',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.arrow_forward_ios_rounded, size: 14, color: isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+                ],
+              ),
+            ),
+          )
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: exams.map((exam) {
+                Color examColor = AppColors.sageGreen;
+                if (exam.colorHex != null) {
+                  try {
+                    examColor = Color(int.parse(exam.colorHex!.replaceAll('#', '0xFF')));
+                  } catch (_) {}
+                }
 
-  Widget _buildExamPill(String title, String days, Color color, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : AppColors.cardSurface,
-        borderRadius: AppRadius.roundedL,
-        border: Border.all(color: color.withValues(alpha: 0.4), width: 1.2),
-        boxShadow: AppShadows.softCard,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                return GestureDetector(
+                  onTap: () => _openExamEditor(context, exam),
+                  child: Container(
+                    width: 190,
+                    margin: const EdgeInsets.only(right: 12),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+                      borderRadius: AppRadius.roundedL,
+                      border: Border.all(color: examColor.withValues(alpha: 0.35), width: 1.2),
+                      boxShadow: AppShadows.softCard,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(color: examColor, shape: BoxShape.circle),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                exam.title,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Icon(Icons.edit_outlined, size: 14, color: isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${exam.daysRemaining} days left',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: examColor,
+                              ),
+                            ),
+                            if (exam.targetScore != null)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: examColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'Target ${exam.targetScore}%',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: examColor,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  days,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: color,
-                  ),
-                ),
-              ],
+                );
+              }).toList(),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 
@@ -453,24 +584,42 @@ class HomeScreen extends StatelessWidget {
           children: [
             Container(
               padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
-                color: AppColors.sageTint,
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkSurface : AppColors.sageTint,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.park_rounded, color: AppColors.deepForest, size: 26),
+              child: Icon(
+                Icons.park_rounded,
+                color: isDark ? AppColors.sageLight : AppColors.deepForest,
+                size: 26,
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('NavBloom Sanctuary', style: AppTypography.titleSmall),
+                  Text(
+                    'NavBloom Sanctuary',
+                    style: AppTypography.titleSmall.copyWith(
+                      color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text('${forest.totalTreesCount} Trees in Sanctuary • ${forest.matureTreesCount} Matured', style: AppTypography.bodySmall),
+                  Text(
+                    '${forest.totalTreesCount} Trees in Sanctuary • ${forest.matureTreesCount} Matured',
+                    style: AppTypography.bodySmall.copyWith(
+                      color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                    ),
+                  ),
                 ],
               ),
             ),
-            const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.deepForest),
+            Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 16,
+              color: isDark ? AppColors.sageLight : AppColors.deepForest,
+            ),
           ],
         ),
       ),
