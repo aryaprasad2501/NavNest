@@ -5,12 +5,19 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/nest_badge.dart';
-import '../../../core/widgets/nest_button.dart';
 import '../../../core/widgets/nest_card.dart';
 import '../../../core/widgets/nest_progress_bar.dart';
 import 'providers/forest_provider.dart';
+import 'widgets/interactive_tree_3d_viewer.dart';
 
-class TreeDetailsScreen extends StatelessWidget {
+typedef StartFocusTimerCallback = void Function({
+  String? subject,
+  String? chapter,
+  String? subtopic,
+  String? linkedTaskId,
+});
+
+class TreeDetailsScreen extends StatefulWidget {
   final ForestTreeModel? tree;
   final String treeName;
   final String subject;
@@ -20,6 +27,8 @@ class TreeDetailsScreen extends StatelessWidget {
   final int targetXp;
   final String plantedDate;
   final String totalFocusTime;
+  final StartFocusTimerCallback? onStartTimer;
+  final bool autoSpin3D;
 
   const TreeDetailsScreen({
     super.key,
@@ -32,7 +41,38 @@ class TreeDetailsScreen extends StatelessWidget {
     this.targetXp = 300,
     this.plantedDate = '2 Aug 2024',
     this.totalFocusTime = '8h 26m focus',
+    this.onStartTimer,
+    this.autoSpin3D = true,
   });
+
+  @override
+  State<TreeDetailsScreen> createState() => _TreeDetailsScreenState();
+}
+
+class _TreeDetailsScreenState extends State<TreeDetailsScreen> {
+  int? _previewStage;
+
+  @override
+  void initState() {
+    super.initState();
+    _previewStage = widget.tree?.stage ?? widget.stage;
+  }
+
+  String _getStageName(int stage) {
+    switch (stage) {
+      case 1:
+        return 'Seed';
+      case 2:
+        return 'Sprout';
+      case 3:
+        return 'Sapling';
+      case 4:
+        return 'Young Tree';
+      case 5:
+      default:
+        return 'Full Bloom';
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,25 +80,27 @@ class TreeDetailsScreen extends StatelessWidget {
     final forestProvider = context.watch<ForestProvider>();
 
     // Retrieve active tree instance from provider if available
-    final currentTree = tree != null
+    final currentTree = widget.tree != null
         ? forestProvider.trees.firstWhere(
-            (t) => t.id == tree!.id,
-            orElse: () => tree!,
+            (t) => t.id == widget.tree!.id,
+            orElse: () => widget.tree!,
           )
         : null;
 
-    final effectiveTreeName = currentTree?.species.displayName ?? treeName;
-    final effectiveSubject = currentTree?.subjectName ?? subject;
-    final effectiveChapter = currentTree?.chapterName ?? chapter;
-    final effectiveStage = currentTree?.stage ?? stage;
-    final effectiveXp = currentTree?.xpEarned ?? currentXp;
+    final effectiveTreeName = currentTree?.species.displayName ?? widget.treeName;
+    final effectiveSubject = currentTree?.subjectName ?? widget.subject;
+    final effectiveChapter = currentTree?.chapterName ?? widget.chapter;
+    final effectiveStage = currentTree?.stage ?? widget.stage;
+    final effectiveXp = currentTree?.xpEarned ?? widget.currentXp;
     final effectiveFocusTime = currentTree != null
         ? '${currentTree.focusMinutes}m focus'
-        : totalFocusTime;
+        : widget.totalFocusTime;
     final effectivePlantedDate = currentTree != null
         ? '${currentTree.plantedAt.day}/${currentTree.plantedAt.month}/${currentTree.plantedAt.year}'
-        : plantedDate;
+        : widget.plantedDate;
     final effectiveSpecies = currentTree?.species ?? TreeSpecies.mountainPine;
+
+    final displayStage = _previewStage ?? effectiveStage;
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkCanvas : AppColors.ivoryCanvas,
@@ -79,8 +121,107 @@ class TreeDetailsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            // Grand Illustrated Tree View Card
-            _buildGrandTreeIllustrationCard(isDark, effectiveSpecies, effectiveStage),
+            // Hero Real-Time 3D Tree Viewer with 360° Touch Orbit & Stage Selector
+            InteractiveTree3DViewer(
+              species: effectiveSpecies,
+              initialStage: displayStage,
+              isDark: isDark,
+              height: 330,
+              showStageSelector: true,
+              autoSpin: widget.autoSpin3D,
+              onStageChanged: (stage) {
+                setState(() => _previewStage = stage);
+              },
+            ),
+
+            // Strict Visual Preview vs. Authoritative Growth Stage Separation
+            if (displayStage != effectiveStage) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.amberWarm.withValues(alpha: 0.12),
+                  borderRadius: AppRadius.roundedM,
+                  border: Border.all(color: AppColors.amberWarm.withValues(alpha: 0.35)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.preview_rounded, size: 18, color: AppColors.amberHoney),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Visual 3D Preview: Stage $displayStage (${_getStageName(displayStage)})\nActual Persisted Growth: Stage $effectiveStage (${_getStageName(effectiveStage)})',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => setState(() => _previewStage = effectiveStage),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      child: const Text('Reset', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: AppSpacing.l),
+
+            // Botanical Classification & Lore
+            NestCard(
+              color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Text(effectiveSpecies.iconEmoji, style: const TextStyle(fontSize: 20)),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(effectiveSpecies.displayName, style: AppTypography.titleMedium),
+                              Text(
+                                effectiveSpecies.botanicalName,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                  color: effectiveSpecies.themeColor,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      NestBadge(
+                        label: currentTree?.isWithered == true ? 'Withered' : 'Healthy',
+                        variant: currentTree?.isWithered == true ? NestBadgeVariant.urgentRed : NestBadgeVariant.safeGreen,
+                        isDense: true,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    effectiveSpecies.lore,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.4,
+                      color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
             const SizedBox(height: AppSpacing.l),
 
@@ -101,28 +242,75 @@ class TreeDetailsScreen extends StatelessWidget {
 
             const SizedBox(height: AppSpacing.l),
 
-            // Action Buttons
-            if (currentTree != null && effectiveStage < 5)
-              NestButton(
-                label: 'Nurture Tree (+40 XP, +15 Coins)',
-                icon: Icons.water_drop_rounded,
-                onPressed: () async {
-                  await forestProvider.nurtureTree(currentTree.id);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          '🌱 ${currentTree.species.displayName} was nurtured with water and care!',
-                        ),
-                        backgroundColor: AppColors.deepForest,
+            // Action Buttons: Strict Reward Integrity Protected
+            if (currentTree != null) ...[
+              Row(
+                children: [
+                  // Cosmetic Care Interaction: Tends/waters tree with 0 unearned XP/coins
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.water_drop_rounded, size: 18, color: AppColors.forestEmerald),
+                      label: const Text('Water Tree 💧'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: AppRadius.roundedL),
                       ),
-                    );
-                  }
-                },
-                variant: NestButtonVariant.primary,
-                isFullWidth: true,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                      onPressed: () async {
+                        await forestProvider.nurtureTree(currentTree.id);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '💧 Tended to ${currentTree.species.displayName}! Regular care keeps your sanctuary vibrant.',
+                              ),
+                              backgroundColor: AppColors.deepForest,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  // Genuine Focus Study Action: Drives authoritative growth progression
+                  Expanded(
+                    flex: 2,
+                    child: FilledButton.icon(
+                      icon: const Icon(Icons.timer_rounded, size: 18),
+                      label: Text(
+                        effectiveStage < 5 ? 'Study to Grow 🌱' : 'Focus Again ⏱️',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.deepForest,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: AppRadius.roundedL),
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                        widget.onStartTimer?.call(
+                          subject: effectiveSubject,
+                          chapter: effectiveChapter,
+                        );
+                      },
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 8),
+              Center(
+                child: Text(
+                  effectiveStage < 5
+                      ? '🔒 Growth stages advance strictly through verified focus study sessions'
+                      : '🌟 Full Bloom achieved through verified CBSE focus study',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                  ),
+                ),
+              ),
+            ],
 
             const SizedBox(height: AppSpacing.m),
 
@@ -203,59 +391,6 @@ class TreeDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildGrandTreeIllustrationCard(bool isDark, TreeSpecies species, int currentStage) {
-    return Container(
-      width: double.infinity,
-      height: 290,
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkSurface : AppColors.warmCream,
-        borderRadius: AppRadius.roundedXL,
-        border: Border.all(
-          color: isDark ? AppColors.darkBorder : AppColors.borderSubtle,
-          width: 1.5,
-        ),
-        boxShadow: AppShadows.softCard,
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Background ambient circular glow
-          Container(
-            width: 220,
-            height: 220,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: isDark
-                  ? const Color(0xFF264835).withValues(alpha: 0.5)
-                  : species.themeColor.withValues(alpha: 0.15),
-            ),
-          ),
-
-          // Custom Detailed Dynamic Tree Drawing
-          CustomPaint(
-            size: const Size(260, 240),
-            painter: DynamicStageTreePainter(
-              isDark: isDark,
-              species: species,
-              stage: currentStage,
-            ),
-          ),
-
-          // Stage Badge Overlay
-          Positioned(
-            top: 16,
-            right: 16,
-            child: NestBadge(
-              label: currentStage >= 5 ? 'Full Bloom • Lv. 5' : 'Stage $currentStage / 5',
-              variant: currentStage >= 5 ? NestBadgeVariant.forest : NestBadgeVariant.amber,
-              icon: currentStage >= 5 ? Icons.verified_rounded : Icons.spa_rounded,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildStageProgressCard(bool isDark, int currentStage, int xp) {
     final stages = ['Seed', 'Sprout', 'Sapling', 'Growing', 'Full Bloom'];
     final progressVal = (currentStage / 5.0).clamp(0.0, 1.0);
@@ -299,35 +434,22 @@ class TreeDetailsScreen extends StatelessWidget {
                           ? AppColors.deepForest
                           : isReached
                               ? AppColors.sageGreen
-                              : (isDark ? AppColors.darkBorder : AppColors.warmCream),
+                              : (isDark ? AppColors.darkElevated : AppColors.borderSubtle),
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isCurrent ? AppColors.coinGold : Colors.transparent,
-                        width: 2,
-                      ),
                     ),
                     child: Center(
                       child: isReached
                           ? const Icon(Icons.check_rounded, color: Colors.white, size: 16)
-                          : Text(
-                              '$step',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white60 : Colors.black54,
-                              ),
-                            ),
+                          : Text('$step', style: TextStyle(color: isDark ? Colors.white54 : Colors.black54, fontSize: 11)),
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     stages[index],
                     style: TextStyle(
                       fontSize: 10,
-                      fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
-                      color: isCurrent
-                          ? AppColors.deepForest
-                          : (isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+                      fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                      color: isCurrent ? AppColors.deepForest : (isDark ? AppColors.darkTextMuted : AppColors.textMuted),
                     ),
                   ),
                 ],
@@ -421,189 +543,5 @@ class TreeDetailsScreen extends StatelessWidget {
         ],
       ),
     );
-  }
-}
-
-/// Dynamic Painter rendering 5 growth stages for all sanctuary tree species
-class DynamicStageTreePainter extends CustomPainter {
-  final bool isDark;
-  final TreeSpecies species;
-  final int stage;
-
-  DynamicStageTreePainter({
-    required this.isDark,
-    required this.species,
-    required this.stage,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height * 0.72;
-
-    // Soil Mound at base
-    final soilPaint = Paint()
-      ..color = isDark ? const Color(0xFF2E241E) : const Color(0xFF795548)
-      ..style = PaintingStyle.fill;
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(cx, cy + 24), width: 110, height: 26),
-      soilPaint,
-    );
-
-    // Grass Tuft accents
-    final grassPaint = Paint()
-      ..color = isDark ? const Color(0xFF274B39) : const Color(0xFF81C784)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(cx - 36, cy + 18), 7, grassPaint);
-    canvas.drawCircle(Offset(cx + 34, cy + 19), 6, grassPaint);
-
-    if (stage == 1) {
-      // STAGE 1: SEED
-      final seedPaint = Paint()
-        ..color = isDark ? const Color(0xFFD4A373) : const Color(0xFFB08968);
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(cx, cy + 16), width: 14, height: 20),
-        seedPaint,
-      );
-      // Gentle golden glow
-      final glowPaint = Paint()
-        ..color = const Color(0xFFFFD166).withValues(alpha: 0.6)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
-      canvas.drawCircle(Offset(cx, cy + 16), 18, glowPaint);
-      return;
-    }
-
-    if (stage == 2) {
-      // STAGE 2: SPROUT
-      final stemPaint = Paint()
-        ..color = isDark ? const Color(0xFF4CAF50) : const Color(0xFF66BB6A)
-        ..strokeWidth = 4
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round;
-      canvas.drawLine(Offset(cx, cy + 16), Offset(cx, cy - 14), stemPaint);
-
-      // Two tiny leaves
-      final leafPaint = Paint()
-        ..color = isDark ? const Color(0xFF81C784) : const Color(0xFFA5D6A7)
-        ..style = PaintingStyle.fill;
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(cx - 10, cy - 18), width: 18, height: 10),
-        leafPaint,
-      );
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(cx + 10, cy - 20), width: 18, height: 10),
-        leafPaint,
-      );
-      return;
-    }
-
-    if (stage == 3) {
-      // STAGE 3: SAPLING
-      final trunkPaint = Paint()
-        ..color = isDark ? const Color(0xFF4E342E) : const Color(0xFF6D4C41)
-        ..strokeWidth = 6
-        ..style = PaintingStyle.stroke
-        ..strokeCap = StrokeCap.round;
-      canvas.drawLine(Offset(cx, cy + 18), Offset(cx, cy - 40), trunkPaint);
-
-      final foliagePaint = Paint()
-        ..color = species.themeColor.withValues(alpha: 0.9)
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(Offset(cx, cy - 45), 26, foliagePaint);
-      canvas.drawCircle(Offset(cx - 16, cy - 36), 18, foliagePaint);
-      canvas.drawCircle(Offset(cx + 16, cy - 36), 18, foliagePaint);
-      return;
-    }
-
-    if (stage == 4) {
-      // STAGE 4: YOUNG TREE
-      final trunkPaint = Paint()
-        ..color = isDark ? const Color(0xFF3E2723) : const Color(0xFF5D4037)
-        ..style = PaintingStyle.fill;
-      final trunkPath = Path()
-        ..moveTo(cx - 10, cy + 20)
-        ..lineTo(cx + 10, cy + 20)
-        ..lineTo(cx + 5, cy - 35)
-        ..lineTo(cx + 18, cy - 50)
-        ..lineTo(cx + 12, cy - 54)
-        ..lineTo(cx + 2, cy - 38)
-        ..lineTo(cx - 4, cy - 55)
-        ..lineTo(cx - 10, cy - 52)
-        ..lineTo(cx - 3, cy - 36)
-        ..lineTo(cx - 5, cy + 20)
-        ..close();
-      canvas.drawPath(trunkPath, trunkPaint);
-
-      final foliagePaint = Paint()
-        ..color = species.themeColor.withValues(alpha: 0.95);
-      canvas.drawCircle(Offset(cx, cy - 60), 38, foliagePaint);
-      canvas.drawCircle(Offset(cx - 28, cy - 50), 26, foliagePaint);
-      canvas.drawCircle(Offset(cx + 28, cy - 48), 28, foliagePaint);
-      return;
-    }
-
-    // STAGE 5: FULL BLOOM
-    final trunkPaint = Paint()
-      ..color = isDark ? const Color(0xFF38291F) : const Color(0xFF5D4037)
-      ..style = PaintingStyle.fill;
-    final trunkPath = Path()
-      ..moveTo(cx - 16, cy + 24)
-      ..lineTo(cx + 16, cy + 24)
-      ..lineTo(cx + 8, cy - 20)
-      ..lineTo(cx + 26, cy - 45)
-      ..lineTo(cx + 18, cy - 50)
-      ..lineTo(cx + 4, cy - 28)
-      ..lineTo(cx - 6, cy - 55)
-      ..lineTo(cx - 14, cy - 50)
-      ..lineTo(cx - 4, cy - 26)
-      ..lineTo(cx - 24, cy - 42)
-      ..lineTo(cx - 28, cy - 36)
-      ..lineTo(cx - 8, cy - 18)
-      ..close();
-    canvas.drawPath(trunkPath, trunkPaint);
-
-    // Layered Canopy
-    final foliagePrimary = Paint()..color = species.themeColor;
-    final foliageShadow = Paint()
-      ..color = isDark
-          ? species.themeColor.withValues(alpha: 0.65)
-          : species.themeColor.withValues(alpha: 0.85);
-
-    canvas.drawCircle(Offset(cx, cy - 65), 52, foliageShadow);
-    canvas.drawCircle(Offset(cx - 45, cy - 60), 38, foliageShadow);
-    canvas.drawCircle(Offset(cx + 45, cy - 55), 42, foliageShadow);
-
-    canvas.drawCircle(Offset(cx, cy - 75), 46, foliagePrimary);
-    canvas.drawCircle(Offset(cx - 40, cy - 70), 34, foliagePrimary);
-    canvas.drawCircle(Offset(cx + 38, cy - 66), 36, foliagePrimary);
-    canvas.drawCircle(Offset(cx + 8, cy - 100), 30, foliagePrimary);
-
-    // Wooden Bench & Stone Lantern at foot
-    final benchPaint = Paint()
-      ..color = isDark ? const Color(0xFF4A3728) : const Color(0xFF8D6E63);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(cx - 36, cy + 18), width: 34, height: 10),
-        const Radius.circular(3),
-      ),
-      benchPaint,
-    );
-    canvas.drawRect(Rect.fromLTWH(cx - 50, cy + 22, 4, 10), benchPaint);
-    canvas.drawRect(Rect.fromLTWH(cx - 24, cy + 22, 4, 10), benchPaint);
-
-    final lanternPaint = Paint()..color = const Color(0xFFFFD166);
-    canvas.drawCircle(Offset(cx + 40, cy + 16), 8, lanternPaint);
-
-    // Fluttering butterflies
-    final butterflyPaint = Paint()..color = const Color(0xFFFFE66D);
-    canvas.drawCircle(Offset(cx + 55, cy - 70), 4, butterflyPaint);
-    canvas.drawCircle(Offset(cx - 60, cy - 85), 3, butterflyPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant DynamicStageTreePainter oldDelegate) {
-    return oldDelegate.isDark != isDark ||
-        oldDelegate.species != species ||
-        oldDelegate.stage != stage;
   }
 }

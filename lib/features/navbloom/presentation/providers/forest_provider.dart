@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../../../../core/database/database_helper.dart';
 import '../../../../core/models/achievement_model.dart';
@@ -6,6 +5,7 @@ import '../../../../core/models/forest_decoration_model.dart';
 import '../../../../core/models/forest_journal_entry.dart';
 import '../../../../core/models/forest_tree_model.dart';
 import '../../../../core/models/user_profile.dart';
+import '../utils/planting_space_manager.dart';
 
 class ForestProvider extends ChangeNotifier {
   final DatabaseHelper _dbHelper;
@@ -19,6 +19,8 @@ class ForestProvider extends ChangeNotifier {
   bool _isMoonlitNight = false;
   bool _isLoading = false;
   String _selectedAreaId = 'area_1';
+
+  AreaCapacityInfo get capacityInfo => PlantingSpaceManager.getCapacityInfo(trees: _trees);
 
   ForestProvider({DatabaseHelper? dbHelper})
       : _dbHelper = dbHelper ?? DatabaseHelper.instance;
@@ -43,6 +45,8 @@ class ForestProvider extends ChangeNotifier {
 
   int get totalTreesCount => _trees.length;
   int get matureTreesCount => _trees.where((t) => t.isMatured).length;
+  int get healthyTreesCount => _trees.where((t) => t.status != 'WITHERED').length;
+  int get witheredTreesCount => _trees.where((t) => t.status == 'WITHERED').length;
   int get totalFocusMinutes => _trees.fold(0, (sum, t) => sum + t.focusMinutes);
 
   List<ForestDecorationModel> get equippedDecorations =>
@@ -100,9 +104,25 @@ class ForestProvider extends ChangeNotifier {
     required String subjectName,
     required String chapterName,
     required int focusMinutes,
+    String? sessionId,
     double? xRatio,
     double? yRatio,
+    int? currentSector,
   }) async {
+    // Idempotency check: if session already rewarded, return existing tree to prevent duplicate rewards
+    if (sessionId != null) {
+      final transactionId = 'reward_session_$sessionId';
+      final alreadyAwarded = await _dbHelper.isRewardTransactionRecorded(transactionId);
+      if (alreadyAwarded) {
+        var existing = _trees.where((t) => t.sessionId == sessionId).firstOrNull;
+        if (existing == null) {
+          final allTrees = await _dbHelper.getForestTrees();
+          existing = allTrees.where((t) => t.sessionId == sessionId).firstOrNull;
+        }
+        if (existing != null) return existing;
+      }
+    }
+
     // Determine growth stage based on focus session length
     int stage;
     if (focusMinutes >= 90) {
@@ -120,14 +140,22 @@ class ForestProvider extends ChangeNotifier {
     final xpEarned = focusMinutes * 2 + (stage >= 5 ? 60 : 25);
     final coinsEarned = (focusMinutes * 0.5).round() + (stage >= 5 ? 20 : 5);
 
-    // Coordinate placement
-    final rand = Random();
-    final finalX = xRatio ?? (0.22 + rand.nextDouble() * 0.56);
-    final finalY = yRatio ?? (0.42 + rand.nextDouble() * 0.32);
+    // Intelligent collision-free coordinate placement across continuous glade sectors
+    double finalX = xRatio ?? 0.5;
+    double finalY = yRatio ?? 0.5;
+    if (xRatio == null || yRatio == null) {
+      final slot = PlantingSpaceManager.findOptimalPlantingSpot(
+        existingTrees: _trees,
+        currentSector: currentSector,
+      );
+      finalX = xRatio ?? slot.xRatio;
+      finalY = yRatio ?? slot.yRatio;
+    }
 
     final now = DateTime.now();
     final newTree = ForestTreeModel(
       id: 'tree_${now.millisecondsSinceEpoch}',
+      sessionId: sessionId,
       species: species,
       stage: stage,
       xRatio: double.parse(finalX.toStringAsFixed(3)),
@@ -141,6 +169,17 @@ class ForestProvider extends ChangeNotifier {
       coinsEarned: coinsEarned,
       status: 'HEALTHY',
     );
+
+    // Record idempotency transaction
+    if (sessionId != null) {
+      await _dbHelper.recordRewardTransaction(
+        transactionId: 'reward_session_$sessionId',
+        type: 'FOCUS_SESSION',
+        xpAmount: xpEarned,
+        coinsAmount: coinsEarned,
+        reason: 'Focus session $sessionId on $subjectName',
+      );
+    }
 
     await _dbHelper.insertForestTree(newTree);
 
@@ -178,56 +217,85 @@ class ForestProvider extends ChangeNotifier {
     return newTree;
   }
 
+  /// Plants a withered tree in the forest when a focus session is given up early
+  /// (Forest signature mechanic)
+  Future<ForestTreeModel> plantWitheredTree({
+    required TreeSpecies species,
+    required String subjectName,
+    required String chapterName,
+    required int focusMinutes,
+    String? sessionId,
+  }) async {
+    final slot = PlantingSpaceManager.findOptimalPlantingSpot(existingTrees: _trees);
+    final finalX = slot.xRatio;
+    final finalY = slot.yRatio;
+
+    final now = DateTime.now();
+    final witheredTree = ForestTreeModel(
+      id: 'tree_withered_${now.millisecondsSinceEpoch}',
+      sessionId: sessionId,
+      species: species,
+      stage: 1,
+      xRatio: double.parse(finalX.toStringAsFixed(3)),
+      yRatio: double.parse(finalY.toStringAsFixed(3)),
+      plantedAt: now,
+      maturedAt: null,
+      subjectName: subjectName,
+      chapterName: chapterName,
+      focusMinutes: focusMinutes,
+      xpEarned: 0,
+      coinsEarned: 0,
+      status: 'WITHERED',
+    );
+
+    await _dbHelper.insertForestTree(witheredTree);
+
+    // Record Journal Entry
+    final journal = ForestJournalEntry(
+      id: 'j_${now.millisecondsSinceEpoch}',
+      title: 'A tree withered in the sanctuary 🥀',
+      category: 'WITHERED',
+      date: now,
+      subjectName: subjectName,
+      focusMinutes: focusMinutes,
+      xpEarned: 0,
+      coinsEarned: 0,
+      notes: 'Focus session gave up early on $subjectName: $chapterName',
+    );
+    await _dbHelper.insertJournalEntry(journal);
+
+    _trees.add(witheredTree);
+    notifyListeners();
+    return witheredTree;
+  }
+
   Future<void> nurtureTree(String treeId) async {
     final index = _trees.indexWhere((t) => t.id == treeId);
     if (index == -1) return;
 
     final tree = _trees[index];
-    if (tree.stage >= 5) return; // Already full bloom
-
-    final newStage = tree.stage + 1;
     final now = DateTime.now();
-    const bonusXp = 40;
-    const bonusCoins = 15;
 
-    final updatedTree = tree.copyWith(
-      stage: newStage,
-      maturedAt: newStage == 5 ? now : tree.maturedAt,
-      xpEarned: tree.xpEarned + bonusXp,
-      coinsEarned: tree.coinsEarned + bonusCoins,
-    );
-
-    await _dbHelper.updateForestTree(updatedTree);
-
-    // Add journal entry
+    // Reward Integrity Enforcement:
+    // Nurturing is a cosmetic care/watering interaction.
+    // It does NOT alter persisted growth stages, fabricate study minutes, or grant unearned XP/coins.
+    // Authoritative growth progression occurs strictly through verified focus study sessions.
     final journal = ForestJournalEntry(
       id: 'j_${now.millisecondsSinceEpoch}',
-      title: newStage == 5
-          ? '${tree.species.displayName} reached Full Bloom! 🌸'
-          : 'Nurtured ${tree.species.displayName} to Stage $newStage 🌱',
-      category: newStage == 5 ? 'BLOOM' : 'PLANTING',
+      title: 'Tended to ${tree.species.displayName} 💧',
+      category: 'CARE',
       date: now,
       subjectName: tree.subjectName,
-      focusMinutes: 15,
-      xpEarned: bonusXp,
-      coinsEarned: bonusCoins,
-      notes: 'Care and revision nurtured the tree closer to maturity.',
+      focusMinutes: 0,
+      xpEarned: 0,
+      coinsEarned: 0,
+      notes: 'Watered and cared for ${tree.species.displayName}. Growth advances via verified study sessions.',
     );
     await _dbHelper.insertJournalEntry(journal);
 
-    // Update Profile
-    if (_userProfile != null) {
-      final updatedProfile = _userProfile!.copyWith(
-        totalXp: _userProfile!.totalXp + bonusXp,
-        coins: _userProfile!.coins + bonusCoins,
-        updatedAt: now,
-      );
-      _userProfile = updatedProfile;
-      await _dbHelper.saveUserProfile(updatedProfile);
-    }
-
-    await _evaluateAchievements();
-    await loadForestData();
+    // Refresh journal entries without fabricating XP, coins, or tree stage
+    _journalEntries = await _dbHelper.getJournalEntries();
+    notifyListeners();
   }
 
   Future<void> deleteTree(String treeId) async {
@@ -237,6 +305,16 @@ class ForestProvider extends ChangeNotifier {
 
   // --- Decorations Operations ---
   Future<bool> unlockDecoration(String decorationId, int costCoins) async {
+    final decIndex = _decorations.indexWhere((d) => d.id == decorationId);
+    if (decIndex != -1) {
+      if (_decorations[decIndex].isUnlocked) {
+        return true; // Idempotency check: Already unlocked, prevent duplicate coin deduction
+      }
+    } else {
+      // Decoration does not exist in catalogue
+      return false;
+    }
+
     if (userCoins < costCoins) {
       return false;
     }
@@ -259,8 +337,7 @@ class ForestProvider extends ChangeNotifier {
     // Auto-equip upon unlock
     await _dbHelper.toggleEquipDecoration(decorationId, true);
 
-    // Add journal entry
-    final decIndex = _decorations.indexWhere((d) => d.id == decorationId);
+    // Add journal entry (0 XP earned for cosmetic decoration purchases)
     final decName = decIndex != -1 ? _decorations[decIndex].name : 'Sanctuary Decoration';
 
     final journal = ForestJournalEntry(
@@ -269,7 +346,7 @@ class ForestProvider extends ChangeNotifier {
       category: 'MILESTONE',
       date: now,
       focusMinutes: 0,
-      xpEarned: 25,
+      xpEarned: 0,
       coinsEarned: -costCoins,
       notes: 'Sanctuary enhanced with $decName.',
     );

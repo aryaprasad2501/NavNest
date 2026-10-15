@@ -12,12 +12,19 @@ import 'providers/planner_provider.dart';
 import 'widgets/exam_editor_sheet.dart';
 import 'widgets/task_editor_sheet.dart';
 
+typedef StartFocusCallback = void Function({
+  String? subject,
+  String? chapter,
+  String? subtopic,
+  String? linkedTaskId,
+});
+
 class PlannerScreen extends StatefulWidget {
-  final VoidCallback onStartFocus;
+  final StartFocusCallback? onStartFocus;
 
   const PlannerScreen({
     super.key,
-    required this.onStartFocus,
+    this.onStartFocus,
   });
 
   @override
@@ -76,6 +83,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = NavThemeColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final provider = Provider.of<PlannerProvider>(context);
 
@@ -87,16 +95,18 @@ class _PlannerScreenState extends State<PlannerScreen> {
     final weekRangeTitle = '${_monthNames[startDay.month - 1]} ${startDay.day} – ${_monthNames[endDay.month - 1]} ${endDay.day}';
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkCanvas : AppColors.ivoryCanvas,
+      backgroundColor: colors.canvas,
       appBar: AppBar(
+        backgroundColor: colors.canvas,
+        iconTheme: IconThemeData(color: colors.primary),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Daily & Weekly Planner', style: AppTypography.titleLarge),
+            Text('Daily & Weekly Planner', style: AppTypography.titleLarge.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w800)),
             Text(
               weekRangeTitle,
               style: AppTypography.bodySmall.copyWith(
-                color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                color: colors.textMuted,
               ),
             ),
           ],
@@ -106,18 +116,20 @@ class _PlannerScreenState extends State<PlannerScreen> {
             Padding(
               padding: const EdgeInsets.only(right: 4.0),
               child: ActionChip(
-                avatar: const Icon(Icons.today_rounded, size: 16),
-                label: const Text('Today', style: TextStyle(fontSize: 12)),
+                backgroundColor: colors.surfaceCard,
+                side: BorderSide(color: colors.borderSubtle),
+                avatar: Icon(Icons.today_rounded, size: 16, color: colors.primary),
+                label: Text('Today', style: TextStyle(fontSize: 12, color: colors.textPrimary)),
                 onPressed: provider.goToToday,
               ),
             ),
           IconButton(
-            icon: const Icon(Icons.calendar_month_rounded),
+            icon: Icon(Icons.calendar_month_rounded, color: colors.primary),
             tooltip: 'Jump to Any Date',
             onPressed: () => _pickArbitraryDate(context, provider),
           ),
           IconButton(
-            icon: const Icon(Icons.alarm_rounded),
+            icon: Icon(Icons.alarm_rounded, color: colors.primary),
             tooltip: 'Target Exams',
             onPressed: () => _openExamEditor(context),
           ),
@@ -128,12 +140,12 @@ class _PlannerScreenState extends State<PlannerScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
         children: [
           // 1. Dynamic Week Strip with Forward/Backward Pagination
-          _buildDynamicWeekStrip(provider, weekDays, isDark),
+          _buildDynamicWeekStrip(provider, weekDays, colors, isDark),
 
           const SizedBox(height: AppSpacing.m),
 
           // 2. Day Context & Metric Summary Card
-          _buildDayMetricsCard(provider, isDark),
+          _buildDayMetricsCard(provider, colors, isDark),
 
           // 3. Adaptive Rescheduling Banner (if missed past tasks exist)
           if (provider.missedPastTasks.isNotEmpty) ...[
@@ -149,7 +161,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
             children: [
               Text(
                 'Tasks (${provider.tasks.length})',
-                style: AppTypography.titleMedium,
+                style: AppTypography.titleMedium.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w700),
               ),
               NestButton(
                 label: '+ Add Task',
@@ -163,30 +175,30 @@ class _PlannerScreenState extends State<PlannerScreen> {
 
           // 5. Tasks List
           if (provider.tasks.isEmpty)
-            _buildEmptyDayState(provider, isDark)
+            _buildEmptyDayState(provider, colors, isDark)
           else
-            ...provider.tasks.map((task) => _buildTaskCard(context, task, provider, isDark)),
+            ...provider.tasks.map((task) => _buildTaskCard(context, task, provider, colors, isDark)),
 
           const SizedBox(height: 80), // Fab spacing
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.deepForest,
+        backgroundColor: colors.primary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_rounded),
-        label: const Text('Plan Session'),
+        label: const Text('Plan Session', style: TextStyle(fontWeight: FontWeight.bold)),
         onPressed: () => _openTaskEditor(context, date: selectedDate),
       ),
     );
   }
 
-  Widget _buildDynamicWeekStrip(PlannerProvider provider, List<DateTime> weekDays, bool isDark) {
+  Widget _buildDynamicWeekStrip(PlannerProvider provider, List<DateTime> weekDays, NavThemeColors colors, bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+        color: colors.surfaceCard,
         borderRadius: AppRadius.roundedL,
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
+        border: Border.all(color: colors.borderSubtle),
       ),
       child: Column(
         children: [
@@ -195,16 +207,16 @@ class _PlannerScreenState extends State<PlannerScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               IconButton(
-                icon: const Icon(Icons.chevron_left_rounded),
+                icon: Icon(Icons.chevron_left_rounded, color: colors.primary),
                 tooltip: 'Previous Week',
                 onPressed: provider.previousWeek,
               ),
               Text(
                 '${_monthNames[provider.selectedDate.month - 1]} ${provider.selectedDate.year}',
-                style: AppTypography.titleSmall.copyWith(fontWeight: FontWeight.w700),
+                style: AppTypography.titleSmall.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w700),
               ),
               IconButton(
-                icon: const Icon(Icons.chevron_right_rounded),
+                icon: Icon(Icons.chevron_right_rounded, color: colors.primary),
                 tooltip: 'Next Week',
                 onPressed: provider.nextWeek,
               ),
@@ -231,7 +243,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? (isDark ? AppColors.forestEmerald : AppColors.sageGreen)
+                        ? colors.primary
                         : Colors.transparent,
                     borderRadius: AppRadius.roundedM,
                   ),
@@ -244,7 +256,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                           fontWeight: FontWeight.w600,
                           color: isSelected
                               ? Colors.white
-                              : (isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+                              : colors.textMuted,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -255,7 +267,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                           fontWeight: FontWeight.w700,
                           color: isSelected
                               ? Colors.white
-                              : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+                              : colors.textPrimary,
                         ),
                       ),
                       if (isToday)
@@ -265,7 +277,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                           height: 4,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: isSelected ? Colors.white : AppColors.sageGreen,
+                            color: isSelected ? Colors.white : colors.primary,
                           ),
                         ),
                     ],
@@ -279,7 +291,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
     );
   }
 
-  Widget _buildDayMetricsCard(PlannerProvider provider, bool isDark) {
+  Widget _buildDayMetricsCard(PlannerProvider provider, NavThemeColors colors, bool isDark) {
     String contextBadge;
     NestBadgeVariant badgeVariant;
 
@@ -298,7 +310,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
     final actualHours = (provider.actualMinutesToday / 60).toStringAsFixed(1);
 
     return NestCard(
-      color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+      color: colors.surfaceCard,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,7 +322,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                 children: [
                   Text(
                     '${_monthNames[provider.selectedDate.month - 1]} ${provider.selectedDate.day}, ${provider.selectedDate.year}',
-                    style: AppTypography.titleMedium,
+                    style: AppTypography.titleMedium.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(width: 8),
                   NestBadge(label: contextBadge, variant: badgeVariant, isDense: true),
@@ -321,7 +333,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                  color: colors.textPrimary,
                 ),
               ),
             ],
@@ -330,7 +342,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
           NestProgressBar(
             progress: provider.completionProgressToday,
             height: 8,
-            progressColor: AppColors.sageGreen,
+            progressColor: colors.primary,
           ),
           const SizedBox(height: 10),
           Row(
@@ -339,14 +351,14 @@ class _PlannerScreenState extends State<PlannerScreen> {
               Text(
                 'Planned: ${plannedHours}h (${provider.plannedMinutesToday}m)',
                 style: AppTypography.bodySmall.copyWith(
-                  color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                  color: colors.textMuted,
                 ),
               ),
               Text(
                 'Actual: ${actualHours}h completed',
                 style: AppTypography.bodySmall.copyWith(
                   fontWeight: FontWeight.bold,
-                  color: provider.actualMinutesToday > 0 ? AppColors.safeGreen : (isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+                  color: provider.actualMinutesToday > 0 ? AppColors.safeGreen : colors.textMuted,
                 ),
               ),
             ],
@@ -416,24 +428,24 @@ class _PlannerScreenState extends State<PlannerScreen> {
     );
   }
 
-  Widget _buildEmptyDayState(PlannerProvider provider, bool isDark) {
+  Widget _buildEmptyDayState(PlannerProvider provider, NavThemeColors colors, bool isDark) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 40),
       child: Center(
         child: Column(
           children: [
-            Icon(Icons.event_available_rounded, size: 48, color: isDark ? AppColors.darkBorder : AppColors.borderStrong),
+            Icon(Icons.event_available_rounded, size: 48, color: colors.borderSubtle),
             const SizedBox(height: 12),
             Text(
               'No study tasks planned for this day.',
-              style: AppTypography.titleSmall.copyWith(color: isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+              style: AppTypography.titleSmall.copyWith(color: colors.textMuted),
             ),
             const SizedBox(height: 4),
             Text(
               provider.isSelectedDateFuture
                   ? 'Tap "+ Add Task" to schedule ahead for board exams.'
                   : 'Add a new study session or review past work.',
-              style: AppTypography.bodySmall.copyWith(color: isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+              style: AppTypography.bodySmall.copyWith(color: colors.textMuted),
             ),
           ],
         ),
@@ -445,16 +457,17 @@ class _PlannerScreenState extends State<PlannerScreen> {
     BuildContext context,
     PlannerTaskModel task,
     PlannerProvider provider,
+    NavThemeColors colors,
     bool isDark,
   ) {
     final color = task.subjectColorHex != null
         ? Color(int.parse('FF${task.subjectColorHex!.replaceAll('#', '')}', radix: 16))
-        : AppColors.sageGreen;
+        : colors.primary;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       child: NestCard(
-        color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+        color: colors.surfaceCard,
         padding: const EdgeInsets.all(14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -468,11 +481,11 @@ class _PlannerScreenState extends State<PlannerScreen> {
                 height: 24,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: task.isCompleted ? AppColors.safeGreen : Colors.transparent,
+                  color: task.isCompleted ? colors.primary : Colors.transparent,
                   border: Border.all(
                     color: task.isCompleted
-                        ? AppColors.safeGreen
-                        : (isDark ? AppColors.darkBorder : AppColors.borderStrong),
+                        ? colors.primary
+                        : colors.borderSubtle,
                     width: 2,
                   ),
                 ),
@@ -507,8 +520,8 @@ class _PlannerScreenState extends State<PlannerScreen> {
                         fontWeight: FontWeight.w700,
                         decoration: task.isCompleted ? TextDecoration.lineThrough : null,
                         color: task.isCompleted
-                            ? (isDark ? AppColors.darkTextMuted : AppColors.textMuted)
-                            : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+                            ? colors.textMuted
+                            : colors.textPrimary,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -517,7 +530,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                         Text(
                           task.displayTimeRange,
                           style: AppTypography.bodySmall.copyWith(
-                            color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                            color: colors.textMuted,
                           ),
                         ),
                         if (task.outcome != null) ...[
@@ -533,7 +546,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                         style: TextStyle(
                           fontSize: 11,
                           fontStyle: FontStyle.italic,
-                          color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                          color: colors.textMuted,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -547,13 +560,20 @@ class _PlannerScreenState extends State<PlannerScreen> {
             // Actions: Quick Focus Timer trigger or Edit
             if (!task.isCompleted && !provider.isSelectedDatePast)
               IconButton(
-                icon: const Icon(Icons.play_circle_fill_rounded, color: AppColors.sageGreen, size: 28),
+                icon: Icon(Icons.play_circle_fill_rounded, color: colors.primary, size: 28),
                 tooltip: 'Start Focus Timer',
-                onPressed: widget.onStartFocus,
+                onPressed: () {
+                  widget.onStartFocus?.call(
+                    subject: task.subjectName,
+                    chapter: task.chapterId ?? task.title,
+                    subtopic: task.title,
+                    linkedTaskId: task.id,
+                  );
+                },
               )
             else
               IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 18),
+                icon: Icon(Icons.edit_outlined, size: 18, color: colors.textMuted),
                 tooltip: 'Edit Task',
                 onPressed: () => _openTaskEditor(context, task: task, date: provider.selectedDate),
               ),

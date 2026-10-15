@@ -56,6 +56,8 @@ class PlannerProvider extends ChangeNotifier {
   int get completedTasksToday =>
       _tasks.where((t) => t.isCompleted).length;
 
+  int get completedTasksCount => completedTasksToday;
+
   int get totalTasksToday => _tasks.length;
 
   double get completionProgressToday {
@@ -211,6 +213,27 @@ class PlannerProvider extends ChangeNotifier {
 
     await _dbHelper.updatePlannerTask(updated);
     await loadTasksForSelectedDate();
+  }
+
+  /// Records actual focus study minutes against a scheduled task and optionally marks completed
+  Future<void> recordSessionStudyTime({
+    required String taskId,
+    required int addedMinutes,
+    bool markCompleted = false,
+  }) async {
+    PlannerTaskModel? task;
+    try {
+      task = _tasks.firstWhere((t) => t.id == taskId);
+    } catch (_) {}
+
+    if (task != null) {
+      final updated = task.copyWith(
+        actualMinutes: task.actualMinutes + addedMinutes,
+        status: markCompleted ? PlannerTaskStatus.completed : task.status,
+      );
+      await _dbHelper.updatePlannerTask(updated);
+      await loadTasksForSelectedDate();
+    }
   }
 
   // --- Adaptive Rescheduling ---

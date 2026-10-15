@@ -1,0 +1,14 @@
+{
+  "versionName": "1.2.0",
+  "versionCode": 2,
+  "minSdkVersion": 26,
+  "targetSdkVersion": 34,
+  "applicationId": "com.navnest.navnest",
+  "apkUrl": "https://github.com/aryaprasad2501/NavNest/releases/download/v1.2.0/app-release.apk",
+  "downloadUrl": "https://github.com/aryaprasad2501/NavNest/releases/download/v1.2.0/app-release.apk",
+  "sha256": "db841929843391f4e4d1ee732d34f545a4a932467f24007abd760cf24bc70915",
+  "sha256Checksum": "db841929843391f4e4d1ee732d34f545a4a932467f24007abd760cf24bc70915",
+  "sizeBytes": 61588039,
+  "releaseNotes": "• Global Opt-In Demo Mode with isolated database & 30+ mature trees\n• Enhanced NavBloom Storybook Grove with dynamic growth stages\n• CBSE Class 10 Board 2027 Syllabus complete tracking\n• Real Android App Blocker & Strict Mode diagnostics\n• Cryptographically verified APK update delivery workflow",
+  "publishedAt": "2026-10-15T00:00:00Z"
+}

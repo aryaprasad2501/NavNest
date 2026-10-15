@@ -161,19 +161,45 @@ void main() {
       );
       expect(sproutTree.stage, equals(2));
 
-      // Nurture the tree
+      // Nurture the tree (Cosmetic care: verifies reward integrity - stage remains authoritative, 0 unearned XP/coins)
+      final xpBefore = provider.userXp;
+      final coinsBefore = provider.userCoins;
       await provider.nurtureTree(sproutTree.id);
       final nurturedTree = provider.trees.firstWhere((t) => t.id == sproutTree.id);
-      expect(nurturedTree.stage, equals(3)); // Advanced to stage 3
+      expect(nurturedTree.stage, equals(2)); // Persisted growth stage remains authoritative
+      expect(provider.userXp, equals(xpBefore)); // Zero unearned XP granted
+      expect(provider.userCoins, equals(coinsBefore)); // Zero unearned coins granted
 
       // 3. Moonlit Night Mode Toggle
       expect(provider.isMoonlitNight, isFalse);
       provider.toggleMoonlitMode();
       expect(provider.isMoonlitNight, isTrue);
 
-      // 4. Area selection
-      provider.selectArea('area_2');
-      expect(provider.selectedAreaId, equals('area_2'));
+      // 5. Forest App Signature Withered Tree Mechanic (Give Up)
+      final initialHealthy = provider.healthyTreesCount;
+      final initialWithered = provider.witheredTreesCount;
+
+      final witheredTree = await provider.plantWitheredTree(
+        species: TreeSpecies.cherryBlossom,
+        subjectName: 'Mathematics',
+        chapterName: 'Triangles',
+        focusMinutes: 12,
+        sessionId: 'session_giveup_test_1',
+      );
+
+      expect(witheredTree.status, equals('WITHERED'));
+      expect(witheredTree.isWithered, isTrue);
+      expect(witheredTree.isHealthy, isFalse);
+      expect(witheredTree.xpEarned, equals(0));
+      expect(witheredTree.coinsEarned, equals(0));
+      expect(provider.healthyTreesCount, equals(initialHealthy));
+      expect(provider.witheredTreesCount, equals(initialWithered + 1));
+
+      // Verify persisted in database
+      final storedTrees = await dbHelper.getForestTrees();
+      final retrievedWithered = storedTrees.firstWhere((t) => t.id == witheredTree.id);
+      expect(retrievedWithered.status, equals('WITHERED'));
+      expect(retrievedWithered.isWithered, isTrue);
     });
   });
 }

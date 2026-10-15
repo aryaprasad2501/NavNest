@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 import '../models/achievement_model.dart';
@@ -12,17 +13,24 @@ import '../models/shared_space_model.dart';
 import '../models/study_session_model.dart';
 import '../models/subject_model.dart';
 import '../models/subtopic_model.dart';
+import '../models/sync_queue_item.dart';
 import '../models/topic_status.dart';
 import '../models/user_profile.dart';
 
 class DatabaseHelper {
-  static const String _dbName = 'navnest.db';
+  static const String _defaultDbName = 'navnest.db';
+  static const String _demoDbName = 'navnest_demo.db';
   static const int _dbVersion = 1;
 
   static final DatabaseHelper instance = DatabaseHelper._internal();
   static Database? _database;
+  static String _activeDbName = _defaultDbName;
+  static bool _isDemoMode = false;
 
   DatabaseHelper._internal();
+
+  bool get isDemoMode => _isDemoMode;
+  String get activeDbName => _activeDbName;
 
   /// Allows injecting a custom Database instance (e.g. ffi in-memory database for unit testing).
   void setDatabaseForTesting(Database? testDb) {
@@ -37,7 +45,7 @@ class DatabaseHelper {
 
   Future<Database> _initDatabase() async {
     final dbPath = await getDatabasesPath();
-    final path = p.join(dbPath, _dbName);
+    final path = p.join(dbPath, _activeDbName);
 
     return await openDatabase(
       path,
@@ -45,6 +53,29 @@ class DatabaseHelper {
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
+  }
+
+  /// Switches active database to isolated navnest_demo.db and seeds full demo grove & records
+  Future<void> switchToDemoDatabase() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    _activeDbName = _demoDbName;
+    _isDemoMode = true;
+    final db = await database;
+    await seedDemoDataset(db);
+  }
+
+  /// Switches active database back to genuine user database navnest.db
+  Future<void> switchToProductionDatabase() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    _activeDbName = _defaultDbName;
+    _isDemoMode = false;
+    await database;
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -75,6 +106,7 @@ class DatabaseHelper {
         inviteCode TEXT NOT NULL,
         createdByUserId TEXT NOT NULL,
         memberIds TEXT NOT NULL,
+        memberProfiles TEXT,
         totalForestTrees INTEGER NOT NULL DEFAULT 0,
         combinedFocusMinutes INTEGER NOT NULL DEFAULT 0,
         sharedExamName TEXT,
@@ -270,6 +302,9 @@ class DatabaseHelper {
 
     // Seed initial forest trees, decorations, journal & achievements
     await seedInitialForestData(db);
+
+    // Ensure durable sync queue table exists
+    await ensureSyncQueueTableExist(db);
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -280,6 +315,12 @@ class DatabaseHelper {
     } catch (_) {}
     try {
       await ensureForestTablesExist(db);
+    } catch (_) {}
+    try {
+      await ensureSyncQueueTableExist(db);
+    } catch (_) {}
+    try {
+      await db.execute('ALTER TABLE shared_spaces ADD COLUMN memberProfiles TEXT');
     } catch (_) {}
   }
 
@@ -1128,12 +1169,12 @@ class DatabaseHelper {
             'id': 'subtopic_${ch['id']}_$i',
             'chapterId': ch['id'],
             'name': sub['name'],
-            'status': sub['status'],
+            'status': 'NOT_STARTED',
             'estimatedMinutes': sub['mins'],
             'notes': null,
             'orderIndex': i,
-            'completedAt': sub['status'] == 'COMPLETED' ? now.toIso8601String() : null,
-            'revisionCount': sub['status'] == 'NEEDS_REVISION' ? 1 : 0,
+            'completedAt': null,
+            'revisionCount': 0,
             'createdAt': now.toIso8601String(),
             'updatedAt': now.toIso8601String(),
           });
@@ -1598,23 +1639,27 @@ class DatabaseHelper {
     return await db.update('exams', exam.toMap(), where: 'id = ?', whereArgs: [exam.id]);
   }
 
-  /// Purge all dummy mock data so the student starts completely fresh
-  Future<void> purgeDummyDataAndStartFresh([Database? targetDb]) async {
-    final db = targetDb ?? await database;
+  /// Explicitly resets genuine user records in production database (leaves static catalogues intact)
+  Future<void> resetProductionUserData() async {
+    if (_isDemoMode) {
+      // Guard: never wipe production data if in demo mode
+      return;
+    }
+    final db = await database;
     await ensureForestTablesExist(db);
-    // Remove dummy trees
     await db.delete('forest_trees');
-    // Remove dummy planner tasks
     await db.delete('planner_tasks');
-    // Remove dummy study sessions
     await db.delete('study_sessions');
-    // Remove dummy journal entries
     await db.delete('forest_journal');
-    // Clear shared spaces
+    try {
+      await db.delete('reward_transactions');
+    } catch (_) {}
+    try {
+      await db.delete('sync_queue');
+    } catch (_) {}
     try {
       await db.delete('shared_spaces');
     } catch (_) {}
-    // Reset all subtopics to clean NOT_STARTED
     try {
       await db.update('subtopics', {
         'status': 'NOT_STARTED',
@@ -1622,11 +1667,8 @@ class DatabaseHelper {
         'revisionCount': 0,
       });
     } catch (_) {}
-    // Reset achievements progress
     await db.update('achievements', {'progress': 0, 'isUnlocked': 0, 'unlockedAt': null});
-    // Reset decorations to locked and unequipped
     await db.update('forest_decorations', {'isUnlocked': 0, 'isEquipped': 0});
-    // Reset user profile stats to clean slate (0 XP, 0 coins, 0 streak)
     try {
       await db.update('user_profiles', {
         'streakDays': 0,
@@ -1637,6 +1679,350 @@ class DatabaseHelper {
       });
     } catch (_) {}
   }
+
+  /// Backward-compatible alias for resetProductionUserData
+  Future<void> purgeDummyDataAndStartFresh([Database? targetDb]) async {
+    if (targetDb != null) {
+      await targetDb.delete('forest_trees');
+      await targetDb.delete('planner_tasks');
+      await targetDb.delete('study_sessions');
+      await targetDb.delete('forest_journal');
+      try {
+        await targetDb.delete('shared_spaces');
+      } catch (_) {}
+      try {
+        await targetDb.update('subtopics', {
+          'status': 'NOT_STARTED',
+          'completedAt': null,
+          'revisionCount': 0,
+        });
+      } catch (_) {}
+      await targetDb.update('achievements', {'progress': 0, 'isUnlocked': 0, 'unlockedAt': null});
+      await targetDb.update('forest_decorations', {'isUnlocked': 0, 'isEquipped': 0});
+      try {
+        await targetDb.update('user_profiles', {
+          'streakDays': 0,
+          'bestStreak': 0,
+          'totalXp': 0,
+          'coins': 0,
+          'activeSharedSpaceId': null,
+        });
+      } catch (_) {}
+    } else {
+      await resetProductionUserData();
+    }
+  }
+
+  /// Seeds full coherent demo dataset into navnest_demo.db
+  Future<void> seedDemoDataset(Database db) async {
+    await ensureForestTablesExist(db);
+    await ensureSyncQueueTableExist(db);
+    await ensureSharedSpacesTableExist(db);
+
+    final now = DateTime.now();
+
+    // Check if demo trees already seeded
+    final treeCount = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM forest_trees'),
+    );
+    if (treeCount != null && treeCount > 0) return;
+
+    // 1. Demo User Profile
+    await db.insert('user_profiles', {
+      'id': 'demo_student_arya',
+      'displayName': 'Arya 🌿 (Demo Mode)',
+      'email': 'arya.demo@navnest.app',
+      'photoUrl': null,
+      'streakDays': 14,
+      'bestStreak': 21,
+      'lastStudyDate': formatDbDate(now),
+      'totalXp': 3450,
+      'coins': 820,
+      'dailyTargetMinutes': 120,
+      'activeSharedSpaceId': 'demo_shared_space',
+      'createdAt': now.subtract(const Duration(days: 21)).toIso8601String(),
+      'updatedAt': now.toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+    // 2. Demo 30 Forest Trees across 5 stages and 5 species
+    final speciesNames = [
+      'Mountain Pine',
+      'Cherry Blossom',
+      'Ancient Oak',
+      'River Willow',
+      'Golden Ginkgo',
+    ];
+    final subjects = ['Mathematics', 'Science', 'Social Science', 'English', 'Hindi', 'Information Tech'];
+    final chapters = [
+      'Real Numbers',
+      'Chemical Reactions',
+      'Nationalism in Europe',
+      'Trigonometry',
+      'Life Processes',
+      'Resources & Development',
+      'First Flight',
+      'Electricity',
+    ];
+
+    // Grid coordinates spread naturally across 5 isometric sectors
+    final treePlacements = [
+      // Sector 0 (Sanctuary Center)
+      {'gx': 0, 'gy': 0, 'xr': 0.50, 'yr': 0.50, 'st': 5, 'sp': 0, 'mins': 45},
+      {'gx': 1, 'gy': 0, 'xr': 0.58, 'yr': 0.46, 'st': 5, 'sp': 1, 'mins': 50},
+      {'gx': 0, 'gy': 1, 'xr': 0.42, 'yr': 0.54, 'st': 4, 'sp': 2, 'mins': 40},
+      {'gx': -1, 'gy': 0, 'xr': 0.38, 'yr': 0.44, 'st': 5, 'sp': 3, 'mins': 60},
+      {'gx': 0, 'gy': -1, 'xr': 0.52, 'yr': 0.38, 'st': 5, 'sp': 4, 'mins': 45},
+      {'gx': 1, 'gy': 1, 'xr': 0.62, 'yr': 0.58, 'st': 3, 'sp': 1, 'mins': 35},
+      // Sector 1 (Pine Ridge East)
+      {'gx': 2, 'gy': 0, 'xr': 0.72, 'yr': 0.42, 'st': 5, 'sp': 0, 'mins': 50},
+      {'gx': 2, 'gy': 1, 'xr': 0.76, 'yr': 0.50, 'st': 4, 'sp': 0, 'mins': 45},
+      {'gx': 3, 'gy': 0, 'xr': 0.84, 'yr': 0.38, 'st': 5, 'sp': 3, 'mins': 55},
+      {'gx': 2, 'gy': -1, 'xr': 0.70, 'yr': 0.32, 'st': 3, 'sp': 2, 'mins': 30},
+      {'gx': 3, 'gy': -1, 'xr': 0.82, 'yr': 0.28, 'st': 2, 'sp': 4, 'mins': 25},
+      {'gx': 3, 'gy': 1, 'xr': 0.88, 'yr': 0.48, 'st': 5, 'sp': 1, 'mins': 50},
+      // Sector 2 (Sakura Glen South)
+      {'gx': 0, 'gy': 2, 'xr': 0.46, 'yr': 0.68, 'st': 5, 'sp': 1, 'mins': 45},
+      {'gx': 1, 'gy': 2, 'xr': 0.56, 'yr': 0.72, 'st': 5, 'sp': 1, 'mins': 60},
+      {'gx': -1, 'gy': 2, 'xr': 0.36, 'yr': 0.66, 'st': 4, 'sp': 2, 'mins': 40},
+      {'gx': 0, 'gy': 3, 'xr': 0.48, 'yr': 0.82, 'st': 3, 'sp': 3, 'mins': 35},
+      {'gx': 1, 'gy': 3, 'xr': 0.60, 'yr': 0.86, 'st': 2, 'sp': 4, 'mins': 25},
+      {'gx': -1, 'gy': 3, 'xr': 0.34, 'yr': 0.80, 'st': 1, 'sp': 0, 'mins': 25},
+      // Sector 3 (Oak Highlands West)
+      {'gx': -2, 'gy': 0, 'xr': 0.26, 'yr': 0.40, 'st': 5, 'sp': 2, 'mins': 50},
+      {'gx': -2, 'gy': 1, 'xr': 0.24, 'yr': 0.52, 'st': 4, 'sp': 2, 'mins': 45},
+      {'gx': -3, 'gy': 0, 'xr': 0.16, 'yr': 0.36, 'st': 5, 'sp': 4, 'mins': 55},
+      {'gx': -2, 'gy': -1, 'xr': 0.28, 'yr': 0.30, 'st': 3, 'sp': 0, 'mins': 35},
+      {'gx': -3, 'gy': -1, 'xr': 0.18, 'yr': 0.24, 'st': 2, 'sp': 1, 'mins': 25},
+      {'gx': -3, 'gy': 1, 'xr': 0.14, 'yr': 0.48, 'st': 5, 'sp': 3, 'mins': 60},
+      // Sector 4 (Redwood Basin North)
+      {'gx': 0, 'gy': -2, 'xr': 0.54, 'yr': 0.26, 'st': 5, 'sp': 4, 'mins': 60},
+      {'gx': 1, 'gy': -2, 'xr': 0.64, 'yr': 0.22, 'st': 5, 'sp': 4, 'mins': 50},
+      {'gx': -1, 'gy': -2, 'xr': 0.44, 'yr': 0.24, 'st': 4, 'sp': 3, 'mins': 40},
+      {'gx': 0, 'gy': -3, 'xr': 0.52, 'yr': 0.14, 'st': 3, 'sp': 0, 'mins': 35},
+      {'gx': 1, 'gy': -3, 'xr': 0.62, 'yr': 0.12, 'st': 2, 'sp': 1, 'mins': 25},
+      {'gx': -1, 'gy': -3, 'xr': 0.42, 'yr': 0.16, 'st': 1, 'sp': 2, 'mins': 25},
+    ];
+
+    for (int i = 0; i < treePlacements.length; i++) {
+      final p = treePlacements[i];
+      final daysAgo = 14 - (i * 14 ~/ treePlacements.length);
+      final plantedTime = now.subtract(Duration(days: daysAgo, hours: (i * 3) % 24));
+      final maturedTime = (p['st'] as int) >= 5 ? plantedTime.add(Duration(minutes: p['mins'] as int)) : null;
+
+      await db.insert('forest_trees', {
+        'id': 'demo_tree_$i',
+        'sessionId': 'demo_session_$i',
+        'treeType': speciesNames[p['sp'] as int],
+        'stage': p['st'],
+        'gridX': p['gx'],
+        'gridY': p['gy'],
+        'xRatio': p['xr'],
+        'yRatio': p['yr'],
+        'plantedAt': plantedTime.toIso8601String(),
+        'maturedAt': maturedTime?.toIso8601String(),
+        'subjectName': subjects[i % subjects.length],
+        'chapterName': chapters[i % chapters.length],
+        'focusMinutes': p['mins'],
+        'xpEarned': (p['mins'] as int) * 4,
+        'coinsEarned': (p['mins'] as int),
+        'status': 'HEALTHY',
+        'isShared': i % 3 == 0 ? 1 : 0,
+      });
+    }
+
+    // 3. Demo Decorations: Unlock 4, Equip 3
+    await db.update('forest_decorations', {'isUnlocked': 1, 'isEquipped': 1}, where: "id IN ('dec_lantern_1', 'dec_wildflowers_1', 'dec_bench_1')");
+    await db.update('forest_decorations', {'isUnlocked': 1, 'isEquipped': 0}, where: "id = 'dec_pond_1'");
+
+    // 4. Demo Achievements
+    await db.update('achievements', {'progress': 1, 'isUnlocked': 1, 'unlockedAt': now.subtract(const Duration(days: 12)).toIso8601String()}, where: "id = 'ach_first_seed'");
+    await db.update('achievements', {'progress': 5, 'isUnlocked': 1, 'unlockedAt': now.subtract(const Duration(days: 7)).toIso8601String()}, where: "id = 'ach_green_thumb'");
+    await db.update('achievements', {'progress': 10, 'isUnlocked': 1, 'unlockedAt': now.subtract(const Duration(days: 2)).toIso8601String()}, where: "id = 'ach_deep_roots'");
+    await db.update('achievements', {'progress': 2}, where: "id = 'ach_night_owl'");
+    await db.update('achievements', {'progress': 18}, where: "id = 'ach_cbse_scholar'");
+
+    // 5. Demo Study Sessions (15 historical sessions)
+    for (int i = 0; i < 15; i++) {
+      final daysAgo = 7 - (i * 7 ~/ 15);
+      final sTime = now.subtract(Duration(days: daysAgo, hours: (i * 2) % 18 + 2));
+      final mins = [25, 40, 45, 50, 60][i % 5];
+      await db.insert('study_sessions', {
+        'id': 'demo_session_$i',
+        'startedAt': sTime.toIso8601String(),
+        'endedAt': sTime.add(Duration(minutes: mins)).toIso8601String(),
+        'activeSeconds': mins * 60,
+        'pausedSeconds': 0,
+        'subjectId': 'sub_${['maths', 'science', 'sst', 'english', 'hindi', 'it402'][i % 6]}',
+        'chapterId': 'ch_${['math_1', 'sci_1', 'sst_1', 'eng_1', 'hin_1', 'it_1'][i % 6]}',
+        'subtopicId': null,
+        'status': 'COMPLETED',
+        'rewardXp': mins * 4,
+        'rewardCoins': mins,
+        'createdAt': sTime.toIso8601String(),
+      });
+    }
+
+    // 6. Demo Planner Tasks
+    final todayStr = formatDbDate(now);
+    final yesterdayStr = formatDbDate(now.subtract(const Duration(days: 1)));
+
+    await db.insert('planner_tasks', {
+      'id': 'demo_task_1',
+      'date': todayStr,
+      'subjectId': 'sub_maths',
+      'chapterId': 'ch_math_1',
+      'title': 'Real Numbers: Fundamental Theorem & HCF Proofs',
+      'startTime': '09:00',
+      'endTime': '09:45',
+      'plannedMinutes': 45,
+      'actualMinutes': 45,
+      'status': 'COMPLETED',
+      'outcome': 'Covered prime factorisation and word problems',
+      'notes': 'All formulas memorized',
+      'createdAt': now.toIso8601String(),
+    });
+
+    await db.insert('planner_tasks', {
+      'id': 'demo_task_2',
+      'date': todayStr,
+      'subjectId': 'sub_science',
+      'chapterId': 'ch_sci_1',
+      'title': 'Chemical Reactions: Balancing Equations & Redox',
+      'startTime': '10:30',
+      'endTime': '11:15',
+      'plannedMinutes': 45,
+      'actualMinutes': 45,
+      'status': 'COMPLETED',
+      'outcome': 'Practiced 15 NCERT exercise balancing problems',
+      'notes': 'Double displacement and precipitation clear',
+      'createdAt': now.toIso8601String(),
+    });
+
+    await db.insert('planner_tasks', {
+      'id': 'demo_task_3',
+      'date': todayStr,
+      'subjectId': 'sub_sst',
+      'chapterId': 'ch_sst_1',
+      'title': 'Nationalism in Europe: The Age of Revolutions',
+      'startTime': '14:00',
+      'endTime': '14:40',
+      'plannedMinutes': 40,
+      'actualMinutes': 20,
+      'status': 'IN_PROGRESS',
+      'outcome': null,
+      'notes': 'Greek war of independence and romanticism',
+      'createdAt': now.toIso8601String(),
+    });
+
+    await db.insert('planner_tasks', {
+      'id': 'demo_task_4',
+      'date': todayStr,
+      'subjectId': 'sub_maths',
+      'chapterId': 'ch_math_9',
+      'title': 'Trigonometry: Standard Ratios & Table Memorization',
+      'startTime': '16:00',
+      'endTime': '16:45',
+      'plannedMinutes': 45,
+      'actualMinutes': 0,
+      'status': 'UPCOMING',
+      'outcome': null,
+      'notes': 'Focus on sin, cos, tan 0 to 90 degrees values',
+      'createdAt': now.toIso8601String(),
+    });
+
+    await db.insert('planner_tasks', {
+      'id': 'demo_task_missed',
+      'date': yesterdayStr,
+      'subjectId': 'sub_science',
+      'chapterId': 'ch_sci_2',
+      'title': 'Acids, Bases & Salts: pH Scale in Daily Life',
+      'startTime': '17:00',
+      'endTime': '17:40',
+      'plannedMinutes': 40,
+      'actualMinutes': 0,
+      'status': 'MISSED',
+      'outcome': 'Needs rescheduling to tomorrow',
+      'notes': 'Tooth decay and soil pH applications',
+      'createdAt': now.subtract(const Duration(days: 1)).toIso8601String(),
+    });
+
+    // 7. Demo Syllabus Progress (Realistic ~35% completion across CBSE Class 10)
+    final completedSubtopics = [
+      'subtopic_ch_math_1_0', 'subtopic_ch_math_1_1',
+      'subtopic_ch_math_2_0',
+      'subtopic_ch_sci_1_0', 'subtopic_ch_sci_1_1', 'subtopic_ch_sci_1_2', 'subtopic_ch_sci_1_3',
+      'subtopic_ch_sci_2_0',
+      'subtopic_ch_sst_1_0', 'subtopic_ch_sst_1_1',
+      'subtopic_ch_sst_6_0', 'subtopic_ch_sst_6_1',
+      'subtopic_ch_eng_1_0',
+      'subtopic_ch_eng_2_0',
+      'subtopic_ch_eng_3_0', 'subtopic_ch_eng_3_1',
+      'subtopic_ch_hin_1_0',
+      'subtopic_ch_it_1_0', 'subtopic_ch_it_1_1',
+    ];
+    for (final id in completedSubtopics) {
+      await db.update('subtopics', {
+        'status': 'COMPLETED',
+        'completedAt': now.subtract(const Duration(days: 3)).toIso8601String(),
+      }, where: 'id = ?', whereArgs: [id]);
+    }
+
+    final inProgressSubtopics = [
+      'subtopic_ch_math_2_1',
+      'subtopic_ch_sci_2_2',
+      'subtopic_ch_sci_5_0',
+      'subtopic_ch_sst_1_2',
+      'subtopic_ch_hin_1_1',
+      'subtopic_ch_it_1_2',
+    ];
+    for (final id in inProgressSubtopics) {
+      await db.update('subtopics', {'status': 'IN_PROGRESS'}, where: 'id = ?', whereArgs: [id]);
+    }
+
+    final needsRevisionSubtopics = [
+      'subtopic_ch_math_1_2',
+      'subtopic_ch_sci_2_1',
+      'subtopic_ch_eng_2_1',
+      'subtopic_ch_hin_5_1',
+    ];
+    for (final id in needsRevisionSubtopics) {
+      await db.update('subtopics', {
+        'status': 'NEEDS_REVISION',
+        'revisionCount': 1,
+      }, where: 'id = ?', whereArgs: [id]);
+    }
+
+    // 8. Demo Shared Space
+    final memberProfiles = {
+      'demo_student_arya': {
+        'displayName': 'Arya 🌿 (Demo Mode)',
+        'joinedAt': now.subtract(const Duration(days: 14)).toIso8601String(),
+      },
+      'partner_rohan': {
+        'displayName': 'Rohan Sharma ⚡',
+        'joinedAt': now.subtract(const Duration(days: 14)).toIso8601String(),
+        'activeStatus': 'Studying Science: Acids, Bases and Salts',
+        'lastActiveMinutesAgo': 12,
+        'todayFocusMinutes': 90,
+      },
+    };
+
+    await db.insert('shared_spaces', {
+      'id': 'demo_shared_space',
+      'name': 'Board Warriors 2027 🌲',
+      'inviteCode': 'NEST-WAR27',
+      'createdByUserId': 'demo_student_arya',
+      'memberIds': 'demo_student_arya,partner_rohan',
+      'memberProfiles': jsonEncode(memberProfiles),
+      'totalForestTrees': 14,
+      'combinedFocusMinutes': 1640,
+      'sharedExamName': 'CBSE Class 10 Board Exam 2027: Mathematics',
+      'sharedExamDate': DateTime(2027, 3, 11, 10, 30).toIso8601String(),
+      'createdAt': now.subtract(const Duration(days: 14)).toIso8601String(),
+      'updatedAt': now.toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
 
   // ==========================================
   // NAVBLOOM FOREST & GAMIFICATION OPERATIONS (Phase 4)
@@ -2014,13 +2400,38 @@ class DatabaseHelper {
   }
 
   // --- Shared Space DB Methods ---
+  Future<void> ensureSharedSpacesTableExist([Database? targetDb]) async {
+    final db = targetDb ?? await database;
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS shared_spaces (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        inviteCode TEXT NOT NULL,
+        createdByUserId TEXT NOT NULL,
+        memberIds TEXT NOT NULL,
+        memberProfiles TEXT,
+        totalForestTrees INTEGER NOT NULL DEFAULT 0,
+        combinedFocusMinutes INTEGER NOT NULL DEFAULT 0,
+        sharedExamName TEXT,
+        sharedExamDate TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    ''');
+    try {
+      await db.execute('ALTER TABLE shared_spaces ADD COLUMN memberProfiles TEXT');
+    } catch (_) {}
+  }
+
   Future<void> saveSharedSpace(SharedSpaceModel space) async {
     final db = await database;
+    await ensureSharedSpacesTableExist(db);
     await db.insert('shared_spaces', space.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<SharedSpaceModel?> getSharedSpace(String spaceId) async {
     final db = await database;
+    await ensureSharedSpacesTableExist(db);
     final results = await db.query('shared_spaces', where: 'id = ?', whereArgs: [spaceId], limit: 1);
     if (results.isEmpty) return null;
     return SharedSpaceModel.fromMap(results.first);
@@ -2028,6 +2439,7 @@ class DatabaseHelper {
 
   Future<SharedSpaceModel?> getSharedSpaceByCode(String inviteCode) async {
     final db = await database;
+    await ensureSharedSpacesTableExist(db);
     final results = await db.query(
       'shared_spaces',
       where: 'UPPER(inviteCode) = ?',
@@ -2040,7 +2452,113 @@ class DatabaseHelper {
 
   Future<void> clearSharedSpace() async {
     final db = await database;
+    await ensureSharedSpacesTableExist(db);
     await db.delete('shared_spaces');
+  }
+
+  Future<SharedSpaceModel?> getActiveSharedSpace() async {
+    final db = await database;
+    await ensureSharedSpacesTableExist(db);
+    final results = await db.query('shared_spaces', limit: 1);
+    if (results.isEmpty) return null;
+    return SharedSpaceModel.fromMap(results.first);
+  }
+
+  // --- Offline Sync Queue ---
+  Future<void> ensureSyncQueueTableExist([Database? targetDb]) async {
+    final db = targetDb ?? await database;
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS sync_queue (
+        id TEXT PRIMARY KEY,
+        entityType TEXT NOT NULL,
+        entityId TEXT NOT NULL,
+        action TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        retryCount INTEGER NOT NULL DEFAULT 0,
+        lastError TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> insertSyncQueueItem(SyncQueueItem item) async {
+    final db = await database;
+    await ensureSyncQueueTableExist(db);
+    await db.insert('sync_queue', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<SyncQueueItem>> getPendingSyncQueueItems({int limit = 50}) async {
+    final db = await database;
+    await ensureSyncQueueTableExist(db);
+    final results = await db.query(
+      'sync_queue',
+      where: "status = 'PENDING' OR status = 'FAILED'",
+      orderBy: 'createdAt ASC',
+      limit: limit,
+    );
+    return results.map((m) => SyncQueueItem.fromMap(m)).toList();
+  }
+
+  Future<void> updateSyncQueueItem(SyncQueueItem item) async {
+    final db = await database;
+    await ensureSyncQueueTableExist(db);
+    await db.update(
+      'sync_queue',
+      item.toMap(),
+      where: 'id = ?',
+      whereArgs: [item.id],
+    );
+  }
+
+  Future<void> deleteSyncQueueItem(String id) async {
+    final db = await database;
+    await ensureSyncQueueTableExist(db);
+    await db.delete('sync_queue', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<int> getSyncQueuePendingCount() async {
+    final db = await database;
+    await ensureSyncQueueTableExist(db);
+    final count = Sqflite.firstIntValue(
+      await db.rawQuery("SELECT COUNT(*) FROM sync_queue WHERE status = 'PENDING' OR status = 'FAILED'"),
+    );
+    return count ?? 0;
+  }
+
+  // --- Reward Idempotency Ledger ---
+  Future<bool> isRewardTransactionRecorded(String transactionId) async {
+    final db = await database;
+    final results = await db.query(
+      'reward_transactions',
+      where: 'transactionId = ?',
+      whereArgs: [transactionId],
+      limit: 1,
+    );
+    return results.isNotEmpty;
+  }
+
+  Future<void> recordRewardTransaction({
+    required String transactionId,
+    required String type,
+    required int xpAmount,
+    required int coinsAmount,
+    required String reason,
+  }) async {
+    final db = await database;
+    await db.insert(
+      'reward_transactions',
+      {
+        'transactionId': transactionId,
+        'type': type,
+        'xpAmount': xpAmount,
+        'coinsAmount': coinsAmount,
+        'reason': reason,
+        'createdAt': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.ignore,
+    );
   }
 
   // --- Close DB ---

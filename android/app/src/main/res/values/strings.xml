@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">NavNest</string>
+    <string name="accessibility_service_description">NavNest uses this service exclusively to detect when selected distracting apps are opened during active focus study sessions, helping students stay on track without reading or collecting personal data.</string>
+</resources>

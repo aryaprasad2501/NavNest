@@ -289,6 +289,7 @@ class ChapterSubtopicsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = NavThemeColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final provider = Provider.of<SyllabusProvider>(context);
 
@@ -304,23 +305,25 @@ class ChapterSubtopicsScreen extends StatelessWidget {
     );
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkCanvas : AppColors.ivoryCanvas,
+      backgroundColor: colors.canvas,
       appBar: AppBar(
+        backgroundColor: colors.canvas,
+        iconTheme: IconThemeData(color: colors.primary),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(subject.name, style: AppTypography.titleLarge),
+            Text(subject.name, style: AppTypography.titleLarge.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w800)),
             Text(
               '${subject.completedChapters}/${subject.totalChapters} completed • ${(subject.progress * 100).toInt()}%',
               style: AppTypography.bodySmall.copyWith(
-                color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                color: colors.textMuted,
               ),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_circle_outline_rounded),
+            icon: Icon(Icons.add_circle_outline_rounded, color: colors.primary),
             tooltip: 'Add Chapter',
             onPressed: () => _showAddChapterDialog(context, provider),
           ),
@@ -332,14 +335,14 @@ class ChapterSubtopicsScreen extends StatelessWidget {
         children: [
           // Subject Progress Summary Card
           NestCard(
-            color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+            color: colors.surfaceCard,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Subject Syllabus Progress', style: AppTypography.titleSmall),
+                    Text('Subject Syllabus Progress', style: AppTypography.titleSmall.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w700)),
                     NestBadge(
                       label: '${(subject.progress * 100).toInt()}% Done',
                       variant: subject.progress > 0.7 ? NestBadgeVariant.safeGreen : NestBadgeVariant.sage,
@@ -357,9 +360,9 @@ class ChapterSubtopicsScreen extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    _buildStat('Chapters', '${subject.completedChapters} of ${subject.totalChapters}', isDark),
-                    _buildStat('Subtopics', '${subject.completedSubtopics} of ${subject.totalSubtopics}', isDark),
-                    _buildStat('Est. Hours', '${(subject.totalEstimatedMinutes / 60).toStringAsFixed(1)}h', isDark),
+                    _buildStat('Chapters', '${subject.completedChapters} of ${subject.totalChapters}', colors, isDark),
+                    _buildStat('Subtopics', '${subject.completedSubtopics} of ${subject.totalSubtopics}', colors, isDark),
+                    _buildStat('Est. Hours', '${(subject.totalEstimatedMinutes / 60).toStringAsFixed(1)}h', colors, isDark),
                   ],
                 ),
               ],
@@ -375,7 +378,7 @@ class ChapterSubtopicsScreen extends StatelessWidget {
               child: Center(
                 child: Text(
                   'No chapters added yet. Tap + to create the first chapter.',
-                  style: AppTypography.bodyMedium.copyWith(color: AppColors.textMuted),
+                  style: AppTypography.bodyMedium.copyWith(color: colors.textMuted),
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -391,6 +394,7 @@ class ChapterSubtopicsScreen extends StatelessWidget {
                   index,
                   chapter,
                   provider,
+                  colors,
                   isDark,
                 ),
               );
@@ -403,13 +407,13 @@ class ChapterSubtopicsScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildStat(String label, String value, bool isDark) {
+  Widget _buildStat(String label, String value, NavThemeColors colors, bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(fontSize: 10, color: isDark ? AppColors.darkTextMuted : AppColors.textMuted)),
+        Text(label, style: TextStyle(fontSize: 10, color: colors.textMuted)),
         const SizedBox(height: 2),
-        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary)),
+        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: colors.textPrimary)),
       ],
     );
   }
@@ -419,10 +423,11 @@ class ChapterSubtopicsScreen extends StatelessWidget {
     int index,
     ChapterModel chapter,
     SyllabusProvider provider,
+    NavThemeColors colors,
     bool isDark,
   ) {
     return NestCard(
-      color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+      color: colors.surfaceCard,
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -435,7 +440,7 @@ class ChapterSubtopicsScreen extends StatelessWidget {
                   '$index. ${chapter.name}',
                   style: AppTypography.titleSmall.copyWith(
                     fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                    color: colors.textPrimary,
                   ),
                 ),
               ),
@@ -448,7 +453,7 @@ class ChapterSubtopicsScreen extends StatelessWidget {
                     isDense: true,
                   ),
                   PopupMenuButton<String>(
-                    icon: const Icon(Icons.more_vert_rounded, size: 18, color: AppColors.textMuted),
+                    icon: Icon(Icons.more_vert_rounded, size: 18, color: colors.textMuted),
                     padding: EdgeInsets.zero,
                     onSelected: (action) {
                       if (action == 'edit') {
@@ -485,13 +490,13 @@ class ChapterSubtopicsScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          NestProgressBar(progress: chapter.progress, height: 6, progressColor: AppColors.sageGreen),
+          NestProgressBar(progress: chapter.progress, height: 6, progressColor: colors.primary),
           const SizedBox(height: 12),
-          const Divider(),
+          Divider(color: colors.borderSubtle),
           const SizedBox(height: 6),
 
           // Subtopics Rows
-          ...chapter.subtopics.map((sub) => _buildSubtopicRow(context, sub, provider, isDark)),
+          ...chapter.subtopics.map((sub) => _buildSubtopicRow(context, sub, provider, colors, isDark)),
 
           const SizedBox(height: 6),
           // Quick add subtopic action
@@ -502,14 +507,14 @@ class ChapterSubtopicsScreen extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 6.0),
               child: Row(
                 children: [
-                  const Icon(Icons.add_rounded, size: 18, color: AppColors.deepForest),
+                  Icon(Icons.add_rounded, size: 18, color: colors.primary),
                   const SizedBox(width: 6),
                   Text(
                     'Add subtopic...',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: isDark ? AppColors.sageLight : AppColors.deepForest,
+                      color: colors.primary,
                     ),
                   ),
                 ],
@@ -525,6 +530,7 @@ class ChapterSubtopicsScreen extends StatelessWidget {
     BuildContext context,
     SubtopicModel sub,
     SyllabusProvider provider,
+    NavThemeColors colors,
     bool isDark,
   ) {
     final isDone = sub.status == TopicStatus.completed;
@@ -544,10 +550,10 @@ class ChapterSubtopicsScreen extends StatelessWidget {
               width: 22,
               height: 22,
               decoration: BoxDecoration(
-                color: isDone ? AppColors.safeGreen : Colors.transparent,
+                color: isDone ? colors.primary : Colors.transparent,
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: isDone ? AppColors.safeGreen : (isDark ? AppColors.darkBorder : AppColors.borderStrong),
+                  color: isDone ? colors.primary : colors.borderSubtle,
                   width: 1.5,
                 ),
               ),
@@ -569,8 +575,8 @@ class ChapterSubtopicsScreen extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       color: isDone
-                          ? (isDark ? AppColors.darkTextMuted : AppColors.textMuted)
-                          : (isDark ? AppColors.darkTextPrimary : AppColors.textPrimary),
+                          ? colors.textMuted
+                          : colors.textPrimary,
                       decoration: isDone ? TextDecoration.lineThrough : null,
                     ),
                   ),
@@ -579,7 +585,7 @@ class ChapterSubtopicsScreen extends StatelessWidget {
                       padding: const EdgeInsets.only(top: 2.0),
                       child: Row(
                         children: [
-                          const Icon(Icons.edit_note_rounded, size: 14, color: AppColors.sageGreen),
+                          Icon(Icons.edit_note_rounded, size: 14, color: colors.primary),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
@@ -587,7 +593,7 @@ class ChapterSubtopicsScreen extends StatelessWidget {
                               style: TextStyle(
                                 fontSize: 10,
                                 fontStyle: FontStyle.italic,
-                                color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                                color: colors.textMuted,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -606,7 +612,7 @@ class ChapterSubtopicsScreen extends StatelessWidget {
             '${sub.estimatedMinutes}m',
             style: TextStyle(
               fontSize: 11,
-              color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+              color: colors.textMuted,
             ),
           ),
           const SizedBox(width: 8),
@@ -620,7 +626,7 @@ class ChapterSubtopicsScreen extends StatelessWidget {
             ),
           ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded, size: 16, color: AppColors.textMuted),
+            icon: Icon(Icons.more_vert_rounded, size: 16, color: colors.textMuted),
             padding: EdgeInsets.zero,
             onSelected: (action) {
               if (action == 'edit') {

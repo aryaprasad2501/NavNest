@@ -274,32 +274,35 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = NavThemeColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final provider = Provider.of<SyllabusProvider>(context);
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkCanvas : AppColors.ivoryCanvas,
+      backgroundColor: colors.canvas,
       appBar: AppBar(
+        backgroundColor: colors.canvas,
+        iconTheme: IconThemeData(color: colors.primary),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('My Syllabus', style: AppTypography.titleLarge),
+            Text('My Syllabus', style: AppTypography.titleLarge.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w800)),
             Text(
               'CBSE Class 10 Board 2027 • ${(provider.overallProgress * 100).toInt()}% Total Progress',
               style: AppTypography.bodySmall.copyWith(
-                color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                color: colors.textMuted,
               ),
             ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.sync_rounded),
+            icon: Icon(Icons.sync_rounded, color: colors.primary),
             tooltip: 'Load / Reset CBSE Class 10 (2027) Syllabus',
             onPressed: () => _showReloadClass10Dialog(context, provider),
           ),
           IconButton(
-            icon: const Icon(Icons.add_rounded),
+            icon: Icon(Icons.add_rounded, color: colors.primary),
             tooltip: 'Add Subject',
             onPressed: () => _showAddSubjectDialog(context, provider),
           ),
@@ -314,16 +317,16 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
             child: Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: isDark ? AppColors.darkSurface : AppColors.warmCream,
+                color: colors.surfaceCard,
                 borderRadius: AppRadius.roundedFull,
                 border: Border.all(
-                  color: isDark ? AppColors.darkBorder : AppColors.borderSubtle,
+                  color: colors.borderSubtle,
                 ),
               ),
               child: Row(
                 children: [
-                  _buildTab('Subjects (${provider.subjects.length})', 0, isDark),
-                  _buildTab('Exams (${context.watch<PlannerProvider>().exams.length})', 1, isDark),
+                  _buildTab('Subjects (${provider.subjects.length})', 0, colors, isDark),
+                  _buildTab('Exams (${context.watch<PlannerProvider>().exams.length})', 1, colors, isDark),
                 ],
               ),
             ),
@@ -334,24 +337,25 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 6.0),
             child: Container(
               decoration: BoxDecoration(
-                color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+                color: colors.surfaceCard,
                 borderRadius: AppRadius.roundedM,
-                border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
+                border: Border.all(color: colors.borderSubtle),
                 boxShadow: AppShadows.softCard,
               ),
               child: TextField(
                 controller: _searchController,
                 onChanged: provider.setSearchQuery,
+                style: TextStyle(color: colors.textPrimary),
                 decoration: InputDecoration(
                   hintText: 'Search subjects, chapters, subtopics...',
                   hintStyle: TextStyle(
                     fontSize: 13,
-                    color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                    color: colors.textMuted,
                   ),
-                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                  prefixIcon: Icon(Icons.search_rounded, size: 20, color: colors.textMuted),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear_rounded, size: 18),
+                          icon: Icon(Icons.clear_rounded, size: 18, color: colors.textMuted),
                           onPressed: () {
                             _searchController.clear();
                             provider.setSearchQuery('');
@@ -366,7 +370,7 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
           ),
 
           // Status Filter Chips
-          _buildFilterChips(provider, isDark),
+          _buildFilterChips(provider, colors, isDark),
 
           // Revision & Restudy Queue Indicators
           if (provider.revisionQueue.isNotEmpty || provider.restudyQueue.isNotEmpty)
@@ -381,14 +385,14 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.school_outlined, size: 56, color: AppColors.sageGreen),
+                          Icon(Icons.school_outlined, size: 56, color: colors.primary),
                           const SizedBox(height: 16),
-                          Text('No Subjects Found', style: AppTypography.titleMedium),
+                          Text('No Subjects Found', style: AppTypography.titleMedium.copyWith(color: colors.textPrimary)),
                           const SizedBox(height: 8),
                           Text(
                             'Tap below to load the complete official CBSE Class 10 Board Exam 2027 Syllabus with all 6 subjects.',
                             textAlign: TextAlign.center,
-                            style: AppTypography.bodySmall.copyWith(color: AppColors.textMuted),
+                            style: AppTypography.bodySmall.copyWith(color: colors.textMuted),
                           ),
                           const SizedBox(height: 20),
                           NestButton(
@@ -405,11 +409,11 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.search_off_rounded, size: 48, color: AppColors.textMuted),
+                            Icon(Icons.search_off_rounded, size: 48, color: colors.textMuted),
                             const SizedBox(height: 12),
                             Text(
                               'No topics match your current filter.',
-                              style: AppTypography.bodyMedium.copyWith(color: AppColors.textMuted),
+                              style: AppTypography.bodyMedium.copyWith(color: colors.textMuted),
                             ),
                           ],
                         ),
@@ -420,7 +424,7 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
                         separatorBuilder: (_, __) => const SizedBox(height: 12),
                         itemBuilder: (context, index) {
                           final sub = provider.filteredSubjects[index];
-                          return _buildSubjectCard(context, sub, isDark, provider);
+                          return _buildSubjectCard(context, sub, colors, isDark, provider);
                         },
                       ),
           ),
@@ -442,7 +446,7 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
     );
   }
 
-  Widget _buildTab(String label, int index, bool isDark) {
+  Widget _buildTab(String label, int index, NavThemeColors colors, bool isDark) {
     final isSelected = _selectedTabIndex == index;
     return Expanded(
       child: GestureDetector(
@@ -452,7 +456,7 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color: isSelected
-                ? (isDark ? AppColors.forestEmerald : AppColors.deepForest)
+                ? colors.primary
                 : Colors.transparent,
             borderRadius: AppRadius.roundedFull,
           ),
@@ -462,7 +466,7 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? Colors.white : (isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+                color: isSelected ? Colors.white : colors.textMuted,
               ),
             ),
           ),
@@ -471,7 +475,7 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
     );
   }
 
-  Widget _buildFilterChips(SyllabusProvider provider, bool isDark) {
+  Widget _buildFilterChips(SyllabusProvider provider, NavThemeColors colors, bool isDark) {
     final filters = ['All', 'In Progress', 'Revision Needed', 'Restudy Needed', 'Completed'];
 
     return Padding(
@@ -489,18 +493,13 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
                 onSelected: (selected) {
                   if (selected) provider.setFilter(f);
                 },
-                selectedColor: isDark ? AppColors.darkElevated : AppColors.sageTint,
+                selectedColor: colors.primary,
+                backgroundColor: colors.surfaceCard,
+                side: BorderSide(color: isSelected ? colors.primary : colors.borderSubtle),
                 labelStyle: TextStyle(
                   fontSize: 11,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                  color: isSelected
-                      ? AppColors.deepForest
-                      : (isDark ? AppColors.darkTextSecondary : AppColors.textSecondary),
-                ),
-                side: BorderSide(
-                  color: isSelected
-                      ? AppColors.deepForest
-                      : (isDark ? AppColors.darkBorder : AppColors.borderSubtle),
+                  color: isSelected ? Colors.white : colors.textPrimary,
                 ),
               ),
             );
@@ -543,11 +542,11 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
     );
   }
 
-  Widget _buildSubjectCard(BuildContext context, SubjectModel sub, bool isDark, SyllabusProvider provider) {
+  Widget _buildSubjectCard(BuildContext context, SubjectModel sub, NavThemeColors colors, bool isDark, SyllabusProvider provider) {
     return GestureDetector(
       onTap: () => _openSubject(context, sub),
       child: NestCard(
-        color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+        color: colors.surfaceCard,
         padding: const EdgeInsets.all(16),
         child: Row(
           children: [
@@ -568,14 +567,14 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
                     sub.name,
                     style: AppTypography.titleSmall.copyWith(
                       fontWeight: FontWeight.w700,
-                      color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                      color: colors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     '${sub.completedChapters}/${sub.totalChapters} chapters • ${sub.completedSubtopics}/${sub.totalSubtopics} topics',
                     style: AppTypography.bodySmall.copyWith(
-                      color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                      color: colors.textMuted,
                     ),
                   ),
                 ],
@@ -587,19 +586,19 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
               size: 44,
               strokeWidth: 4,
               progressColor: sub.color,
-              backgroundColor: isDark ? AppColors.darkBorder : AppColors.warmCream,
+              backgroundColor: colors.canvas,
               centerWidget: Text(
                 '${(sub.progress * 100).toInt()}%',
                 style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
-                  color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                  color: colors.textPrimary,
                 ),
               ),
             ),
             const SizedBox(width: 4),
             PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert_rounded, size: 20, color: AppColors.textMuted),
+              icon: Icon(Icons.more_vert_rounded, size: 20, color: colors.textMuted),
               padding: EdgeInsets.zero,
               onSelected: (action) {
                 if (action == 'edit') {
@@ -624,7 +623,7 @@ class _SyllabusScreenState extends State<SyllabusScreen> {
                   child: Row(
                     children: [
                       Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.urgentRed),
-                      const SizedBox(width: 8),
+                      SizedBox(width: 8),
                       Text('Delete Subject', style: TextStyle(color: AppColors.urgentRed)),
                     ],
                   ),

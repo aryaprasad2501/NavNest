@@ -1,45 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
-import '../../../core/widgets/nest_badge.dart';
 import '../../../core/widgets/nest_button.dart';
-
-class BlockedAppItem {
-  final String id;
-  final String name;
-  final String packageName;
-  final IconData icon;
-  final Color iconColor;
-  bool isBlocked;
-  int dailyUsageMinutes;
-
-  BlockedAppItem({
-    required this.id,
-    required this.name,
-    required this.packageName,
-    required this.icon,
-    required this.iconColor,
-    required this.isBlocked,
-    this.dailyUsageMinutes = 0,
-  });
-}
-
-class FocusScheduleItem {
-  final String id;
-  final String title;
-  final String timeRange;
-  final String days;
-  bool isActive;
-
-  FocusScheduleItem({
-    required this.id,
-    required this.title,
-    required this.timeRange,
-    required this.days,
-    required this.isActive,
-  });
-}
+import '../../focus/presentation/providers/focus_session_provider.dart';
+import '../models/installed_app_model.dart';
+import 'providers/app_blocker_provider.dart';
+import 'widgets/distraction_shield_dialog.dart';
 
 class AppBlockerScreen extends StatefulWidget {
   const AppBlockerScreen({super.key});
@@ -49,682 +17,631 @@ class AppBlockerScreen extends StatefulWidget {
 }
 
 class _AppBlockerScreenState extends State<AppBlockerScreen> {
-  int _selectedTabIndex = 0; // 0: Focus Mode, 1: Schedule
-  bool _isProtectionActive = true;
-  bool _isStrictMode = true;
-  int _distractionsShieldedToday = 7;
+  String _searchQuery = '';
+  String _selectedCategory = 'All';
 
-  final List<BlockedAppItem> _apps = [
-    BlockedAppItem(
-      id: 'app_insta',
-      name: 'Instagram',
-      packageName: 'com.instagram.android',
-      icon: Icons.camera_alt_rounded,
-      iconColor: const Color(0xFFE1306C),
-      isBlocked: true,
-      dailyUsageMinutes: 38,
-    ),
-    BlockedAppItem(
-      id: 'app_yt',
-      name: 'YouTube',
-      packageName: 'com.google.android.youtube',
-      icon: Icons.smart_display_rounded,
-      iconColor: const Color(0xFFFF0000),
-      isBlocked: true,
-      dailyUsageMinutes: 45,
-    ),
-    BlockedAppItem(
-      id: 'app_snap',
-      name: 'Snapchat',
-      packageName: 'com.snapchat.android',
-      icon: Icons.face_retouching_natural_rounded,
-      iconColor: const Color(0xFFFFB300),
-      isBlocked: true,
-      dailyUsageMinutes: 15,
-    ),
-    BlockedAppItem(
-      id: 'app_games',
-      name: 'BGMI / Gaming Apps',
-      packageName: 'com.pubg.imobile',
-      icon: Icons.sports_esports_rounded,
-      iconColor: const Color(0xFF673AB7),
-      isBlocked: true,
-      dailyUsageMinutes: 20,
-    ),
-    BlockedAppItem(
-      id: 'app_whatsapp',
-      name: 'WhatsApp',
-      packageName: 'com.whatsapp',
-      icon: Icons.chat_rounded,
-      iconColor: const Color(0xFF25D366),
-      isBlocked: false,
-      dailyUsageMinutes: 24,
-    ),
-    BlockedAppItem(
-      id: 'app_chrome',
-      name: 'Chrome Browser',
-      packageName: 'com.android.chrome',
-      icon: Icons.public_rounded,
-      iconColor: const Color(0xFF4285F4),
-      isBlocked: false,
-      dailyUsageMinutes: 18,
-    ),
-  ];
-
-  final List<FocusScheduleItem> _schedules = [
-    FocusScheduleItem(
-      id: 'sch_evening',
-      title: 'CBSE 10th Evening Study Block',
-      timeRange: '05:00 PM – 08:30 PM',
-      days: 'Mon, Tue, Wed, Thu, Fri',
-      isActive: true,
-    ),
-    FocusScheduleItem(
-      id: 'sch_morning',
-      title: 'Morning Science & Math Formulas',
-      timeRange: '06:00 AM – 07:30 AM',
-      days: 'Everyday',
-      isActive: true,
-    ),
-    FocusScheduleItem(
-      id: 'sch_weekend',
-      title: 'Sunday Mock Test & Revision',
-      timeRange: '10:00 AM – 01:00 PM',
-      days: 'Sunday',
-      isActive: false,
-    ),
-  ];
-
-  void _showAddAppsModal() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        final isDark = Theme.of(ctx).brightness == Brightness.dark;
-        final extraApps = [
-          BlockedAppItem(
-            id: 'app_discord',
-            name: 'Discord',
-            packageName: 'com.discord',
-            icon: Icons.headset_mic_rounded,
-            iconColor: const Color(0xFF5865F2),
-            isBlocked: false,
-          ),
-          BlockedAppItem(
-            id: 'app_reddit',
-            name: 'Reddit',
-            packageName: 'com.reddit.frontpage',
-            icon: Icons.bubble_chart_rounded,
-            iconColor: const Color(0xFFFF4500),
-            isBlocked: false,
-          ),
-          BlockedAppItem(
-            id: 'app_netflix',
-            name: 'Netflix',
-            packageName: 'com.netflix.mediaclient',
-            icon: Icons.movie_rounded,
-            iconColor: const Color(0xFFE50914),
-            isBlocked: false,
-          ),
-          BlockedAppItem(
-            id: 'app_telegram',
-            name: 'Telegram',
-            packageName: 'org.telegram.messenger',
-            icon: Icons.send_rounded,
-            iconColor: const Color(0xFF0088CC),
-            isBlocked: false,
-          ),
-        ];
-
-        return StatefulBuilder(
-          builder: (modalCtx, setModalState) {
-            return Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkSurface : AppColors.cardSurface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text('Add Apps to Blocklist', style: AppTypography.titleLarge),
-                  const SizedBox(height: 4),
-                  Text('Select apps to shield during focus sessions', style: AppTypography.bodySmall),
-                  const SizedBox(height: 16),
-                  ...extraApps.map((a) {
-                    return CheckboxListTile(
-                      value: a.isBlocked,
-                      title: Text(a.name, style: AppTypography.labelLarge),
-                      secondary: Icon(a.icon, color: a.iconColor),
-                      onChanged: (val) {
-                        setModalState(() => a.isBlocked = val ?? false);
-                      },
-                    );
-                  }),
-                  const SizedBox(height: 16),
-                  NestButton(
-                    label: 'Add Selected Apps',
-                    onPressed: () {
-                      setState(() {
-                        for (final a in extraApps) {
-                          if (a.isBlocked && !_apps.any((x) => x.id == a.id)) {
-                            _apps.add(a);
-                          }
-                        }
-                      });
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Blocklist updated successfully!')),
-                      );
-                    },
-                    isFullWidth: true,
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showTestBlockingShield() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.deepForestDark,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppColors.sageGreen.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.shield_rounded, color: AppColors.sageGreen, size: 48),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Distraction Shield Active',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Instagram is paused right now.\nYou scheduled this time to prepare for CBSE Class 10 Board Exams.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 13, color: Colors.white70),
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white10,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Text(
-                'Take a deep breath and return to study ✨',
-                style: TextStyle(fontSize: 12, color: AppColors.amberWarm, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(backgroundColor: AppColors.safeGreen),
-                onPressed: () {
-                  setState(() => _distractionsShieldedToday++);
-                  Navigator.pop(ctx);
-                },
-                child: const Text('Back to NavNest Focus'),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showPermissionDiagnostics() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: const [
-            Icon(Icons.perm_device_information_rounded, color: AppColors.deepForest),
-            SizedBox(width: 8),
-            Text('Android & Vivo Setup'),
-          ],
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Device: Vivo Y28 (Android 14 / FuntouchOS 14)',
-                style: AppTypography.titleSmall.copyWith(color: AppColors.deepForest),
-              ),
-              const SizedBox(height: 12),
-              _buildPermRow(
-                '1. Usage Access Permission',
-                'Granted ✓',
-                'Allows NavNest to detect when a distracting app enters foreground.',
-                true,
-              ),
-              const Divider(height: 16),
-              _buildPermRow(
-                '2. Display Over Other Apps',
-                'Granted ✓',
-                'Allows NavNest to show the mindful blocking shield when restricted apps are opened.',
-                true,
-              ),
-              const Divider(height: 16),
-              _buildPermRow(
-                '3. FuntouchOS Autostart',
-                'Action Required',
-                'Vivo aggressively kills background processes. Go to Settings → Apps → Autostart → Enable NavNest.',
-                false,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Opening device permission settings...')),
-              );
-            },
-            child: const Text('Open Settings'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPermRow(String title, String status, String desc, bool isOk) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(child: Text(title, style: AppTypography.labelLarge)),
-            NestBadge(
-              label: status,
-              variant: isOk ? NestBadgeVariant.safeGreen : NestBadgeVariant.amber,
-              isDense: true,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(desc, style: AppTypography.bodySmall),
-      ],
-    );
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final blocker = Provider.of<AppBlockerProvider>(context, listen: false);
+      blocker.refreshAccessibilityStatus();
+      if (blocker.installedApps.isEmpty) {
+        blocker.loadInstalledApps();
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = NavThemeColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final blocker = context.watch<AppBlockerProvider>();
+    final focus = context.watch<FocusSessionProvider>();
+
+    final isFocusRunning = focus.isRunning;
+
+    // Filter apps based on search and category
+    final filteredApps = blocker.installedApps.where((app) {
+      final matchesSearch = _searchQuery.isEmpty ||
+          app.appName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          app.packageName.toLowerCase().contains(_searchQuery.toLowerCase());
+
+      if (!matchesSearch) return false;
+
+      if (_selectedCategory == 'All') return true;
+      if (_selectedCategory == 'Blocked') return app.isBlocked;
+      return app.category == _selectedCategory;
+    }).toList();
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkCanvas : AppColors.ivoryCanvas,
+      backgroundColor: colors.canvas,
       appBar: AppBar(
-        title: Text('App Blocker & Distraction Control', style: AppTypography.titleLarge),
+        backgroundColor: colors.canvas,
+        title: Text('App Blocker & Shield', style: AppTypography.titleLarge.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w800)),
+        iconTheme: IconThemeData(color: colors.primary),
         actions: [
           IconButton(
-            icon: const Icon(Icons.info_outline_rounded),
-            tooltip: 'Permission Diagnostics',
-            onPressed: _showPermissionDiagnostics,
+            icon: Icon(Icons.refresh_rounded, color: colors.primary),
+            tooltip: 'Refresh Apps & Status',
+            onPressed: () {
+              blocker.refreshAccessibilityStatus();
+              blocker.loadInstalledApps();
+            },
           ),
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
-        children: [
-          // Segmented Tabs: [Focus Mode] [Schedule]
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkSurface : AppColors.warmCream,
-                borderRadius: AppRadius.roundedFull,
-                border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
-              ),
-              child: Row(
-                children: [
-                  _buildTab('Focus Mode', 0, isDark),
-                  _buildTab('Schedules & Limits', 1, isDark),
-                ],
-              ),
-            ),
-          ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Accessibility Service Onboarding / Status Card
+            _buildAccessibilityStatusCard(context, blocker, colors, isDark),
 
-          Expanded(
-            child: _selectedTabIndex == 0
-                ? _buildFocusModeTab(isDark)
-                : _buildScheduleTab(isDark),
-          ),
+            const SizedBox(height: 20),
 
-          // Bottom Action Bar
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-            child: Row(
+            // 2. Shield Stats & Focus Connection Banner
+            _buildShieldStatsCard(blocker, isFocusRunning, colors, isDark),
+
+            const SizedBox(height: 20),
+
+            // 3. Blocker Control Switches (Protection Active & Strict Mode)
+            _buildProtectionSwitchesCard(blocker, colors, isDark),
+
+            const SizedBox(height: 24),
+
+            // 4. App List Header & Quick Setup Actions
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    icon: const Icon(Icons.visibility_rounded),
-                    label: const Text('Test Shield'),
-                    onPressed: _showTestBlockingShield,
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: AppRadius.roundedL),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Restricted Applications', style: AppTypography.titleMedium.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${blocker.blockedPackages.length} apps currently restricted',
+                      style: AppTypography.bodySmall.copyWith(
+                        color: colors.textMuted,
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  flex: 2,
-                  child: NestButton(
-                    label: '+ Add Apps',
-                    icon: Icons.add_rounded,
-                    onPressed: _showAddAppsModal,
-                    variant: NestButtonVariant.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
+                TextButton.icon(
+                  onPressed: () {
+                    blocker.blockPackages(AppBlockerProvider.defaultPopularDistractions);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Shielded top social & gaming distractions!'),
+                        backgroundColor: AppColors.deepForest,
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.bolt_rounded, size: 18),
+                  label: const Text('Block Top 6'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: colors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   ),
                 ),
               ],
             ),
-          ),
-        ],
+
+            const SizedBox(height: 12),
+
+            // 5. Search Bar
+            TextField(
+              style: TextStyle(color: colors.textPrimary),
+              decoration: InputDecoration(
+                hintText: 'Search installed apps...',
+                hintStyle: TextStyle(color: colors.textMuted),
+                prefixIcon: Icon(Icons.search_rounded, size: 20, color: colors.textMuted),
+                filled: true,
+                fillColor: colors.surfaceCard,
+                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                border: OutlineInputBorder(
+                  borderRadius: AppRadius.roundedL,
+                  borderSide: BorderSide(color: colors.borderSubtle),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: AppRadius.roundedL,
+                  borderSide: BorderSide(color: colors.borderSubtle),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: AppRadius.roundedL,
+                  borderSide: BorderSide(color: colors.primary, width: 1.5),
+                ),
+              ),
+              onChanged: (val) => setState(() => _searchQuery = val),
+            ),
+
+            const SizedBox(height: 12),
+
+            // 6. Category Filter Chips
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  'All',
+                  'Blocked',
+                  'Social & Chat',
+                  'Media & Streaming',
+                  'Gaming',
+                  'Browsers',
+                ].map((cat) {
+                  final isSel = _selectedCategory == cat;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: ChoiceChip(
+                      label: Text(cat),
+                      selected: isSel,
+                      selectedColor: colors.primary,
+                      backgroundColor: colors.surfaceCard,
+                      side: BorderSide(color: isSel ? colors.primary : colors.borderSubtle),
+                      labelStyle: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                        color: isSel ? Colors.white : colors.textPrimary,
+                      ),
+                      onSelected: (selected) {
+                        if (selected) setState(() => _selectedCategory = cat);
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // 7. Installed App Items List
+            if (blocker.isLoadingApps) ...[
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32.0),
+                  child: CircularProgressIndicator(color: AppColors.deepForest),
+                ),
+              ),
+            ] else if (filteredApps.isEmpty) ...[
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Text(
+                    'No apps found matching your query.',
+                    style: TextStyle(color: isDark ? AppColors.darkTextMuted : AppColors.textMuted),
+                  ),
+                ),
+              ),
+            ] else ...[
+              ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: filteredApps.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, idx) {
+                  final app = filteredApps[idx];
+                  return _buildAppItemCard(app, blocker, colors, isDark);
+                },
+              ),
+            ],
+
+            const SizedBox(height: 32),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildFocusModeTab(bool isDark) {
-    final blockedCount = _apps.where((a) => a.isBlocked).length;
+  Widget _buildAccessibilityStatusCard(BuildContext context, AppBlockerProvider blocker, NavThemeColors colors, bool isDark) {
+    final isEnabled = blocker.isAccessibilityEnabled;
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
-      children: [
-        // Protection Status Card
-        _buildProtectionStatusCard(isDark),
+    if (isEnabled) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.safeGreen.withValues(alpha: isDark ? 0.2 : 0.12),
+          borderRadius: AppRadius.roundedL,
+          border: Border.all(color: AppColors.safeGreen, width: 1.4),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(
+                color: AppColors.safeGreen,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Study Shield Active 🛡️',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.safeGreen),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Accessibility service connected. Distracting apps will be blocked during focus.',
+                    style: TextStyle(fontSize: 11, color: colors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            FilledButton.tonal(
+              onPressed: () {
+                DistractionShieldDialog.show(context, 'com.instagram.android');
+              },
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.safeGreen,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                minimumSize: Size.zero,
+              ),
+              child: const Text('Test Shield', style: TextStyle(fontSize: 11)),
+            ),
+          ],
+        ),
+      );
+    }
 
-        const SizedBox(height: AppSpacing.m),
-
-        // Strict Mode Card
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkCard : AppColors.cardSurface,
-            borderRadius: AppRadius.roundedL,
-            border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
-          ),
-          child: Row(
+    // Onboarding card when Accessibility is NOT yet enabled
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppColors.amberHoney.withValues(alpha: isDark ? 0.2 : 0.12),
+        borderRadius: AppRadius.roundedL,
+        border: Border.all(color: AppColors.amberHoney, width: 1.4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: const BoxDecoration(
-                  color: AppColors.amberSoft,
+                  color: AppColors.amberHoney,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.lock_clock_rounded, color: AppColors.amberHoney, size: 20),
+                child: const Icon(Icons.security_rounded, color: Colors.white, size: 22),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Strict Mode Active', style: AppTypography.titleSmall),
+                    const Text(
+                      'Accessibility Setup Required',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.amberHoney),
+                    ),
+                    const SizedBox(height: 2),
                     Text(
-                      'Blocks uninstallation and exiting during live focus sessions.',
-                      style: AppTypography.bodySmall,
+                      'Android requires this to detect distracting apps during study.',
+                      style: TextStyle(fontSize: 12, color: colors.textPrimary),
                     ),
                   ],
                 ),
               ),
-              Switch.adaptive(
-                value: _isStrictMode,
-                activeThumbColor: AppColors.deepForest,
-                activeTrackColor: AppColors.sageTint,
-                onChanged: (val) => setState(() => _isStrictMode = val),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // Privacy Assurance Banner
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: colors.canvas,
+              borderRadius: AppRadius.roundedM,
+              border: Border.all(color: colors.borderSubtle),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.lock_rounded, size: 18, color: colors.primary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Zero Data Collection: NavNest never reads passwords, personal messages, or screen text. Only window changes during study sessions are monitored.',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colors.textMuted,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          // Setup Instructions
+          Text(
+            'How to enable (3 easy steps):',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colors.textPrimary),
+          ),
+          const SizedBox(height: 6),
+          _buildSetupStep(colors, isDark, '1', 'Tap "Enable Study Shield" below — Settings will open'),
+          const SizedBox(height: 4),
+          _buildSetupStep(colors, isDark, '2', 'Find "NavNest Study Shield" and tap it'),
+          const SizedBox(height: 4),
+          _buildSetupStep(colors, isDark, '3', 'Toggle ON and tap "Allow" when Android asks'),
+
+          const SizedBox(height: 10),
+
+          // Android 13+ warning
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.orange.withValues(alpha: 0.12),
+              borderRadius: AppRadius.roundedM,
+              border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.info_outline_rounded, size: 16, color: Colors.orange),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Android 13+ only: If the toggle is greyed out, go back → App Info for NavNest → tap ⋮ (3-dot menu) → "Allow restricted settings" → return here.',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: colors.textPrimary,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          Row(
+            children: [
+              Expanded(
+                child: NestButton(
+                  label: 'Enable Study Shield',
+                  icon: Icons.open_in_new_rounded,
+                  onPressed: () => blocker.openAccessibilitySettings(),
+                  variant: NestButtonVariant.primary,
+                  isFullWidth: true,
+                ),
+              ),
+              const SizedBox(width: 10),
+              OutlinedButton.icon(
+                onPressed: () {
+                  blocker.refreshAccessibilityStatus();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Checking permission status…'),
+                      duration: Duration(seconds: 1),
+                    ),
+                  );
+                },
+                icon: Icon(Icons.refresh_rounded, size: 16, color: colors.primary),
+                label: Text('Re-check', style: TextStyle(fontSize: 12, color: colors.textPrimary)),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide(color: colors.borderSubtle),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
               ),
             ],
           ),
-        ),
-
-        const SizedBox(height: AppSpacing.l),
-
-        // Blocked Apps Header
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Blocked Apps ($blockedCount)', style: AppTypography.titleMedium),
-            Text('Interceptions: $_distractionsShieldedToday', style: AppTypography.labelMedium.copyWith(color: AppColors.safeGreen)),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.m),
-
-        // App Rows with Switches
-        ..._apps.map((app) => _buildAppRow(app, isDark)),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildScheduleTab(bool isDark) {
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 8.0),
+  Widget _buildSetupStep(NavThemeColors colors, bool isDark, String number, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark ? AppColors.darkCard : AppColors.cardSurface,
-            borderRadius: AppRadius.roundedXL,
-            border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
+          width: 20,
+          height: 20,
+          decoration: const BoxDecoration(
+            color: AppColors.amberHoney,
+            shape: BoxShape.circle,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('Daily App Limit', style: AppTypography.titleSmall),
-                  const NestBadge(label: '45m / Day', variant: NestBadgeVariant.amber, isDense: true),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Overall daily recreation limit for all non-study apps combined.',
-                style: AppTypography.bodySmall,
-              ),
-            ],
+          child: Center(
+            child: Text(
+              number,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
           ),
         ),
-
-        const SizedBox(height: AppSpacing.l),
-
-        Text('Scheduled Focus Restrictions', style: AppTypography.titleMedium),
-        const SizedBox(height: AppSpacing.m),
-
-        ..._schedules.map((sch) => _buildScheduleRow(sch, isDark)),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              color: colors.textMuted,
+              height: 1.4,
+            ),
+          ),
+        ),
       ],
     );
   }
 
-  Widget _buildScheduleRow(FocusScheduleItem sch, bool isDark) {
+  Widget _buildShieldStatsCard(AppBlockerProvider blocker, bool isFocusRunning, NavThemeColors colors, bool isDark) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+        color: colors.surfaceCard,
         borderRadius: AppRadius.roundedL,
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
+        border: Border.all(color: colors.borderSubtle),
+        boxShadow: AppShadows.softCard,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildStatColumn(
+            '${blocker.distractionsShieldedToday}',
+            'Distractions Shielded',
+            Icons.shield_outlined,
+            AppColors.safeGreen,
+            colors,
+            isDark,
+          ),
+          Container(
+            height: 36,
+            width: 1,
+            color: colors.borderSubtle,
+          ),
+          _buildStatColumn(
+            isFocusRunning ? 'ACTIVE' : 'IDLE',
+            'Focus Timer State',
+            isFocusRunning ? Icons.timer_rounded : Icons.timer_outlined,
+            isFocusRunning ? colors.primary : colors.textMuted,
+            colors,
+            isDark,
+          ),
+          Container(
+            height: 36,
+            width: 1,
+            color: colors.borderSubtle,
+          ),
+          _buildStatColumn(
+            blocker.isStrictMode ? 'STRICT' : 'STANDARD',
+            'Enforcement',
+            Icons.lock_outline_rounded,
+            AppColors.amberHoney,
+            colors,
+            isDark,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatColumn(String value, String label, IconData icon, Color color, NavThemeColors colors, bool isDark) {
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: colors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: colors.textMuted,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProtectionSwitchesCard(AppBlockerProvider blocker, NavThemeColors colors, bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surfaceCard,
+        borderRadius: AppRadius.roundedL,
+        border: Border.all(color: colors.borderSubtle),
+      ),
+      child: Column(
+        children: [
+          SwitchListTile(
+            value: blocker.isProtectionActive,
+            activeTrackColor: colors.primary,
+            title: Text('Shield Distractions During Focus', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: colors.textPrimary)),
+            subtitle: Text(
+              'Enforces app blocking whenever a study timer is running.',
+              style: TextStyle(fontSize: 11, color: colors.textMuted),
+            ),
+            onChanged: (val) => blocker.toggleProtection(val),
+          ),
+          Divider(height: 1, color: colors.borderSubtle),
+          SwitchListTile(
+            value: blocker.isStrictMode,
+            activeTrackColor: colors.primary,
+            title: Text('Strict Focus Mode', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: colors.textPrimary)),
+            subtitle: Text(
+              'Prevents bypassing or snoozing shield until your study block completes.',
+              style: TextStyle(fontSize: 11, color: colors.textMuted),
+            ),
+            onChanged: (val) => blocker.toggleStrictMode(val),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppItemCard(InstalledAppModel app, AppBlockerProvider blocker, NavThemeColors colors, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: colors.surfaceCard,
+        borderRadius: AppRadius.roundedM,
+        border: Border.all(
+          color: app.isBlocked
+              ? colors.primary.withValues(alpha: 0.5)
+              : colors.borderSubtle,
+        ),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(
-              color: AppColors.sageTint,
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: colors.canvas,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.schedule_rounded, color: AppColors.deepForest, size: 20),
+            child: Text(app.iconEmoji, style: const TextStyle(fontSize: 18)),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(sch.title, style: AppTypography.titleSmall),
-                const SizedBox(height: 2),
-                Text('${sch.timeRange} • ${sch.days}', style: AppTypography.bodySmall),
-              ],
-            ),
-          ),
-          Switch.adaptive(
-            value: sch.isActive,
-            activeThumbColor: AppColors.deepForest,
-            activeTrackColor: AppColors.sageTint,
-            onChanged: (val) => setState(() => sch.isActive = val),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTab(String label, int index, bool isDark) {
-    final isSelected = _selectedTabIndex == index;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _selectedTabIndex = index),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? AppColors.deepForest : Colors.transparent,
-            borderRadius: AppRadius.roundedFull,
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? Colors.white : (isDark ? AppColors.darkTextMuted : AppColors.textMuted),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProtectionStatusCard(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : AppColors.cardSurface,
-        borderRadius: AppRadius.roundedXL,
-        border: Border.all(
-          color: _isProtectionActive ? AppColors.safeGreen.withValues(alpha: 0.5) : AppColors.borderSubtle,
-          width: 1.2,
-        ),
-        boxShadow: AppShadows.softCard,
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: const BoxDecoration(
-              color: AppColors.safeGreenLight,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.shield_rounded, color: AppColors.safeGreen, size: 26),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Distraction protection is active', style: AppTypography.titleMedium),
-                const SizedBox(height: 2),
                 Text(
-                  '${_apps.where((a) => a.isBlocked).length} apps blocked. Interceptions shielded: $_distractionsShieldedToday',
-                  style: AppTypography.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          Switch.adaptive(
-            value: _isProtectionActive,
-            activeThumbColor: AppColors.deepForest,
-            activeTrackColor: AppColors.sageTint,
-            onChanged: (val) => setState(() => _isProtectionActive = val),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAppRow(BlockedAppItem app, bool isDark) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : AppColors.cardSurface,
-        borderRadius: AppRadius.roundedM,
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: app.iconColor.withValues(alpha: 0.15),
-              borderRadius: AppRadius.roundedS,
-            ),
-            child: Icon(app.icon, color: app.iconColor, size: 22),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(app.name, style: AppTypography.labelLarge),
-                Text(
-                  app.isBlocked ? 'Blocked during study' : 'Usage: ${app.dailyUsageMinutes}m today',
+                  app.appName,
                   style: TextStyle(
-                    fontSize: 11,
-                    color: app.isBlocked ? AppColors.safeGreen : AppColors.textMuted,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${app.category} • ${app.packageName}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: colors.textMuted,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          Switch.adaptive(
+          Switch(
             value: app.isBlocked,
-            activeThumbColor: AppColors.deepForest,
-            activeTrackColor: AppColors.sageTint,
-            onChanged: (val) => setState(() => app.isBlocked = val),
+            activeTrackColor: colors.primary,
+            onChanged: (_) => blocker.toggleAppBlock(app.packageName),
           ),
         ],
       ),

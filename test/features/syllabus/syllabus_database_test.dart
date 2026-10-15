@@ -83,7 +83,7 @@ void main() {
       final firstChapter = maths.chapters.first;
       expect(firstChapter.subtopics.length, greaterThanOrEqualTo(3));
       expect(firstChapter.subtopics.first.name, equals('Fundamental Theorem of Arithmetic'));
-      expect(firstChapter.subtopics.first.status, equals(TopicStatus.completed));
+      expect(firstChapter.subtopics.first.status, equals(TopicStatus.notStarted));
     });
 
     test('Subject CRUD and reordering operate correctly', () async {

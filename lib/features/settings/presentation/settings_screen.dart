@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../../../core/services/apk_update_service.dart';
 import '../../../core/services/auth_service.dart';
+import '../../../core/services/demo_mode_service.dart';
 import '../../../core/services/theme_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -344,6 +346,160 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _confirmEnterDemoMode() {
+    final demoService = Provider.of<DemoModeService>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.science_rounded, color: Color(0xFFD97706)),
+            SizedBox(width: 8),
+            Text('Explore Demo Mode?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const [
+            Text(
+              'This will load a complete, pre-populated demonstration state across NavNest:\n\n'
+              '• 30 NavBloom trees across all 5 growth stages\n'
+              '• Realistic CBSE Class 10 Board 2027 progress\n'
+              '• Study sessions, stats, streaks & planner tasks\n'
+              '• Sample partner in Shared Space ("Rohan ⚡")\n'
+              '• App Blocker demonstration\n\n'
+              'Your genuine data is 100% isolated and safe in your private database. You can return to your real records anytime.',
+              style: TextStyle(fontSize: 13, height: 1.4),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: const Color(0xFFD97706)),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await demoService.enterDemoMode(context);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Demo mode activated: Exploring sample grove & records.'),
+                    backgroundColor: Color(0xFFD97706),
+                  ),
+                );
+              }
+            },
+            child: const Text('Explore Demo Data'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmExitDemoMode() {
+    final demoService = Provider.of<DemoModeService>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.assignment_return_rounded, color: AppColors.safeGreen),
+            SizedBox(width: 8),
+            Text('Exit Demo Mode?'),
+          ],
+        ),
+        content: const Text(
+          'This will return you to your genuine personal study records, trees, and progress.\n\nAll demo records will be unloaded immediately.',
+          style: TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Stay in Demo'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.safeGreen),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await demoService.exitDemoMode(context);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Restored to your genuine personal data.'),
+                    backgroundColor: AppColors.safeGreen,
+                  ),
+                );
+              }
+            },
+            child: const Text('Exit Demo & Return to My Data'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmResetMyData() {
+    final demoService = Provider.of<DemoModeService>(context, listen: false);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: AppColors.urgentRed),
+            SizedBox(width: 8),
+            Text('Reset My Data?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const [
+            Text(
+              '⚠️ WARNING: Permanent Destructive Action\n\n'
+              'This will completely reset all your personal records:\n'
+              '• Deletes all your planted trees\n'
+              '• Clears completed study sessions & history\n'
+              '• Resets syllabus progress to NOT STARTED\n'
+              '• Clears planner tasks\n'
+              '• Resets streak, XP and coins to 0\n\n'
+              'This action CANNOT be undone.',
+              style: TextStyle(fontSize: 13, height: 1.4),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.urgentRed),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              await demoService.resetProductionData(context);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Your account and forest have been reset to a clean slate.'),
+                    backgroundColor: AppColors.urgentRed,
+                  ),
+                );
+              }
+            },
+            child: const Text('Reset All My Data'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _showCheckForUpdatesFlow() async {
     // 1. Show checking indicator
     showDialog(
@@ -585,15 +741,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFF1E88E5)),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
+              final launched = await _updateService.installDownloadedApk();
               _updateService.reset();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Update verified & installed successfully! Local database preserved.'),
-                  backgroundColor: AppColors.deepForest,
-                ),
-              );
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(launched
+                        ? 'Launching Android Package Installer...'
+                        : 'Update package verified. Android Package Installer requested.'),
+                    backgroundColor: AppColors.deepForest,
+                  ),
+                );
+              }
             },
             child: const Text('INSTALL'),
           ),
@@ -606,11 +767,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final themeService = Provider.of<ThemeService>(context, listen: true);
     final forest = context.watch<ForestProvider>();
+    final demoService = context.watch<DemoModeService>();
     AuthService? authService;
     try {
       authService = context.watch<AuthService>();
     } catch (_) {}
-    final isDark = themeService.isDarkMode;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final studentName = authService?.currentUser?.displayName ??
         forest.userProfile?.displayName ??
@@ -619,10 +781,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final email = authService?.currentUser?.email ?? forest.userProfile?.email;
     final targetMins = forest.userProfile?.dailyTargetMinutes ?? 120;
 
+    final colors = NavThemeColors.of(context);
+
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkCanvas : AppColors.ivoryCanvas,
+      backgroundColor: colors.canvas,
       appBar: AppBar(
-        title: Text('Settings', style: AppTypography.titleLarge),
+        backgroundColor: colors.canvas,
+        iconTheme: IconThemeData(color: colors.primary),
+        title: Text('Settings', style: AppTypography.titleLarge.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w800)),
       ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
@@ -654,19 +820,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: _showEditProfileDialog,
             isDark: isDark,
           ),
-          _buildSettingsTile(
-            icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-            title: 'Sanctuary Theme',
-            subtitle: isDark ? 'Moonlit Forest (Dark mode)' : 'Whispering Meadow (Light mode)',
-            trailing: Switch.adaptive(
-              value: isDark,
-              activeThumbColor: AppColors.deepForest,
-              activeTrackColor: AppColors.sageTint,
-              onChanged: (_) => themeService.toggleTheme(),
-            ),
-            onTap: () => themeService.toggleTheme(),
-            isDark: isDark,
-          ),
+          _buildThemeSelectorCard(themeService, isDark),
 
           const SizedBox(height: AppSpacing.l),
 
@@ -709,8 +863,54 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           const SizedBox(height: AppSpacing.l),
 
-          // In-App Update Workflow Tile (Requirements Section 3)
-          _buildSectionHeader('In-App Updater & Device', isDark),
+          // Settings & Diagnostics (Requirements Part B & C)
+          _buildSectionHeader('Settings & Diagnostics', isDark),
+          if (!demoService.isDemoMode) ...[
+            _buildSettingsTile(
+              icon: Icons.science_outlined,
+              title: 'Explore Demo Data',
+              subtitle: 'Load sample grove, 30+ trees, syllabus progress & stats',
+              badge: 'Opt-in Demo',
+              iconColor: const Color(0xFFD97706),
+              titleColor: const Color(0xFFD97706),
+              onTap: _confirmEnterDemoMode,
+              isDark: isDark,
+            ),
+            _buildSettingsTile(
+              icon: Icons.delete_forever_rounded,
+              title: 'Reset My Data',
+              subtitle: 'Wipe personal study records to return to empty clean slate',
+              iconColor: AppColors.urgentRed,
+              titleColor: AppColors.urgentRed,
+              onTap: _confirmResetMyData,
+              isDark: isDark,
+            ),
+          ] else ...[
+            _buildSettingsTile(
+              icon: Icons.assignment_return_rounded,
+              title: 'Exit Demo & Return to My Data',
+              subtitle: 'Restores your genuine personal records. Demo data is discarded',
+              badge: 'Active Demo',
+              iconColor: AppColors.safeGreen,
+              titleColor: AppColors.safeGreen,
+              onTap: _confirmExitDemoMode,
+              isDark: isDark,
+            ),
+            _buildSettingsTile(
+              icon: Icons.restart_alt_rounded,
+              title: 'Reset Demo Data',
+              subtitle: 'Reset sample grove back to default demonstration state',
+              onTap: () async {
+                await demoService.enterDemoMode(context);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Demo sample grove reset.')),
+                  );
+                }
+              },
+              isDark: isDark,
+            ),
+          ],
           _buildSettingsTile(
             icon: Icons.system_update_rounded,
             title: 'Check for Updates',
@@ -774,7 +974,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Flexible(
                       child: Text(
                         name,
-                        style: AppTypography.titleMedium,
+                        style: AppTypography.titleMedium.copyWith(
+                          color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -787,14 +990,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   email?.isNotEmpty == true
                       ? '$email • CBSE 2027'
                       : 'CBSE Class 10th Board 2027 • $targetMins m target',
-                  style: AppTypography.bodySmall,
+                  style: AppTypography.bodySmall.copyWith(
+                    color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.edit_outlined, color: AppColors.deepForest),
+            icon: Icon(Icons.edit_outlined, color: isDark ? AppColors.sageLight : AppColors.deepForest),
             onPressed: _showEditProfileDialog,
             tooltip: 'Edit Profile',
           ),
@@ -833,7 +1038,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Expanded(
                 child: Text(
                   'Google Account & Cloud Backup',
-                  style: AppTypography.titleMedium.copyWith(fontWeight: FontWeight.bold),
+                  style: AppTypography.titleMedium.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                  ),
                 ),
               ),
               if (isLinked)
@@ -912,7 +1120,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       Text(
                         name,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                        ),
                       ),
                       Text(
                         email,
@@ -1002,26 +1214,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Widget? trailing,
     required VoidCallback onTap,
     required bool isDark,
+    Color? titleColor,
+    Color? iconColor,
   }) {
+    final colors = NavThemeColors(isDark: isDark);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+        color: colors.surfaceCard,
         borderRadius: AppRadius.roundedL,
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
+        border: Border.all(color: colors.borderSubtle),
       ),
       child: ListTile(
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: isDark ? AppColors.darkElevated : AppColors.sageTint,
+            color: iconColor != null
+                ? iconColor.withValues(alpha: 0.12)
+                : colors.canvas,
             borderRadius: AppRadius.roundedM,
           ),
-          child: Icon(icon, color: AppColors.deepForest, size: 20),
+          child: Icon(
+            icon,
+            color: iconColor ?? colors.primary,
+            size: 20,
+          ),
         ),
         title: Row(
           children: [
-            Expanded(child: Text(title, style: AppTypography.titleSmall)),
+            Expanded(
+              child: Text(
+                title,
+                style: AppTypography.titleSmall.copyWith(
+                  color: titleColor ?? colors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
             if (badge != null)
               NestBadge(label: badge, variant: NestBadgeVariant.forest, isDense: true),
           ],
@@ -1030,11 +1259,168 @@ class _SettingsScreenState extends State<SettingsScreen> {
           subtitle,
           style: TextStyle(
             fontSize: 12,
-            color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+            color: colors.textMuted,
           ),
         ),
-        trailing: trailing ?? const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+        trailing: trailing ?? Icon(Icons.chevron_right_rounded, color: colors.textMuted),
         onTap: onTap,
+      ),
+    );
+  }
+
+  Widget _buildThemeSelectorCard(ThemeService themeService, bool isDark) {
+    final currentMode = themeService.themeMode;
+    final colors = NavThemeColors(isDark: isDark);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colors.surfaceCard,
+        borderRadius: AppRadius.roundedL,
+        border: Border.all(color: colors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colors.canvas,
+                  borderRadius: AppRadius.roundedM,
+                ),
+                child: Icon(
+                  Icons.palette_outlined,
+                  color: colors.primary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Sanctuary Theme',
+                      style: AppTypography.titleSmall.copyWith(
+                        color: colors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      currentMode == ThemeMode.dark
+                          ? 'Midnight (Moonlit Nature 🌙)'
+                          : currentMode == ThemeMode.light
+                              ? 'Dawn (Morning Nature ☀️)'
+                              : 'System Default (Matches device ⚙️)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: colors.canvas,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: colors.borderSubtle),
+            ),
+            child: Row(
+              children: [
+                _buildThemeSegmentOption(
+                  label: 'Dawn',
+                  icon: Icons.wb_sunny_rounded,
+                  isSelected: currentMode == ThemeMode.light,
+                  onTap: () => themeService.setThemeMode(ThemeMode.light),
+                  colors: colors,
+                ),
+                _buildThemeSegmentOption(
+                  label: 'Midnight',
+                  icon: Icons.nightlight_round,
+                  isSelected: currentMode == ThemeMode.dark,
+                  onTap: () => themeService.setThemeMode(ThemeMode.dark),
+                  colors: colors,
+                ),
+                _buildThemeSegmentOption(
+                  label: 'System',
+                  icon: Icons.brightness_auto_rounded,
+                  isSelected: currentMode == ThemeMode.system,
+                  onTap: () => themeService.setThemeMode(ThemeMode.system),
+                  colors: colors,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThemeSegmentOption({
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required NavThemeColors colors,
+  }) {
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? colors.primary
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: colors.primary.withValues(alpha: 0.2),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ]
+                : [],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 15,
+                color: isSelected
+                    ? Colors.white
+                    : colors.textMuted,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected
+                      ? Colors.white
+                      : colors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

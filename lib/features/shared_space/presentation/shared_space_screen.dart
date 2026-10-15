@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../../core/database/database_helper.dart';
-import '../../../core/services/local_storage_service.dart';
+import '../../../core/services/auth_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
@@ -10,6 +9,7 @@ import '../../../core/widgets/nest_badge.dart';
 import '../../../core/widgets/nest_button.dart';
 import '../../../core/widgets/nest_card.dart';
 import '../../navbloom/presentation/providers/forest_provider.dart';
+import 'providers/shared_space_provider.dart';
 
 class SharedSpaceScreen extends StatefulWidget {
   const SharedSpaceScreen({super.key});
@@ -19,52 +19,61 @@ class SharedSpaceScreen extends StatefulWidget {
 }
 
 class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
-  bool _isPaired = false;
-  String _inviteCode = 'NEST-2027-CBSE';
-  String _partnerName = '';
-  String _partnerTopic = '';
-  int _partnerFocusMinutesToday = 0;
-  int _cheersSent = 0;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadState();
+      if (mounted) {
+        context.read<SharedSpaceProvider>().initialize();
+      }
     });
   }
 
-  void _loadState() {
-    final storage = context.read<LocalStorageService>();
-    setState(() {
-      _isPaired = storage.isSharedPaired;
-      _partnerName = storage.sharedPartnerName;
-      _inviteCode = storage.sharedInviteCode;
-      _partnerTopic = _isPaired ? 'CBSE Class 10 Board Prep' : '';
-      _partnerFocusMinutesToday = 0;
-      _cheersSent = 0;
-    });
-  }
-
-  void _copyInviteCode() {
-    Clipboard.setData(ClipboardData(text: _inviteCode));
+  void _copyInviteCode(String code) {
+    Clipboard.setData(ClipboardData(text: code));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Invite code $_inviteCode copied to clipboard!'),
+        content: Text('Invite code $code copied to clipboard!'),
         backgroundColor: AppColors.deepForest,
       ),
     );
   }
 
-  void _sendCheer(String emoji, String message) {
-    setState(() => _cheersSent++);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Sent cheer to $_partnerName: $emoji $message'),
-        backgroundColor: AppColors.deepForest,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+  Future<void> _generateNewInviteCode() async {
+    final shared = context.read<SharedSpaceProvider>();
+    final code = await shared.generateInviteCode();
+    if (mounted && code != null) {
+      Clipboard.setData(ClipboardData(text: code));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Generated new secure invite code $code (copied)! Valid for 48h.'),
+          backgroundColor: AppColors.deepForest,
+        ),
+      );
+    }
+  }
+
+  void _sendCheer(String emoji, String message) async {
+    final shared = context.read<SharedSpaceProvider>();
+    final success = await shared.sendCheer(emoji, message);
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sent cheer to ${shared.partnerName}: $emoji $message'),
+            backgroundColor: AppColors.deepForest,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not send cheer. Please check internet connection.'),
+            backgroundColor: AppColors.urgentRed,
+          ),
+        );
+      }
+    }
   }
 
   void _showJoinSpaceDialog() {
@@ -80,7 +89,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Enter your study partner\'s invite code:',
+              'Enter your study partner\'s invite code (e.g. NEST-7X9K2M):',
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 10),
@@ -88,13 +97,13 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
               controller: codeController,
               textCapitalization: TextCapitalization.characters,
               decoration: InputDecoration(
-                hintText: 'e.g. NEST-8492',
+                hintText: 'e.g. NEST-8492KM',
                 border: OutlineInputBorder(borderRadius: AppRadius.roundedM),
               ),
             ),
             const SizedBox(height: 14),
             const Text(
-              'Partner\'s Name (optional):',
+              'Partner\'s Name (optional nickname):',
               style: TextStyle(fontSize: 13),
             ),
             const SizedBox(height: 8),
@@ -117,23 +126,26 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
                   ? nameController.text.trim()
                   : 'Study Partner 🌿';
               Navigator.pop(ctx);
-              final storage = context.read<LocalStorageService>();
-              await storage.setSharedPaired(true);
-              await storage.setSharedPartnerName(name);
-              setState(() {
-                _isPaired = true;
-                _partnerName = name;
-                _partnerTopic = 'CBSE Class 10 Board Prep';
-                _partnerFocusMinutesToday = 0;
-                _cheersSent = 0;
-              });
+
+              final shared = context.read<SharedSpaceProvider>();
+              final success = await shared.joinSpace(code, partnerNameOverride: name);
+
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Connected with $name in Private Shared Space!'),
-                    backgroundColor: AppColors.deepForest,
-                  ),
-                );
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Connected with ${shared.partnerName} in Private Shared Space!'),
+                      backgroundColor: AppColors.deepForest,
+                    ),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(shared.errorMessage ?? 'Failed to connect. Please verify code.'),
+                      backgroundColor: AppColors.urgentRed,
+                    ),
+                  );
+                }
               }
             },
             child: const Text('Connect'),
@@ -149,7 +161,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Disconnect Shared Space?'),
         content: const Text(
-          'Are you sure you want to leave this accountability space? Your own personal study trees and XP will remain completely safe.',
+          'Are you sure you want to leave this accountability space? Your own personal study trees and XP will remain completely safe on your device.',
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Stay')),
@@ -157,16 +169,8 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
             style: FilledButton.styleFrom(backgroundColor: AppColors.urgentRed),
             onPressed: () async {
               Navigator.pop(ctx);
-              final storage = context.read<LocalStorageService>();
-              await storage.clearSharedSpaceData();
-              await DatabaseHelper.instance.clearSharedSpace();
-              setState(() {
-                _isPaired = false;
-                _partnerName = '';
-                _partnerTopic = '';
-                _partnerFocusMinutesToday = 0;
-                _cheersSent = 0;
-              });
+              final shared = context.read<SharedSpaceProvider>();
+              await shared.leaveSpace();
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text('Disconnected from shared space.')),
@@ -183,26 +187,33 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final colors = NavThemeColors.of(context);
+    final sharedProvider = context.watch<SharedSpaceProvider>();
+    final authService = context.watch<AuthService>();
     final forest = context.watch<ForestProvider>();
+
+    final isPaired = sharedProvider.isPaired;
     final myFocusMins = forest.totalFocusMinutes;
-    final combinedFocusMins = myFocusMins + (_isPaired ? _partnerFocusMinutesToday : 0);
+    final combinedFocusMins = myFocusMins + (isPaired ? sharedProvider.partnerFocusMinutesToday : 0);
     final myTreesCount = forest.totalTreesCount;
-    final combinedTreesCount = myTreesCount;
+    final combinedTreesCount = myTreesCount + (isPaired ? sharedProvider.partnerTreesCountToday : 0);
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.darkCanvas : AppColors.ivoryCanvas,
+      backgroundColor: colors.canvas,
       appBar: AppBar(
+        backgroundColor: colors.canvas,
+        iconTheme: IconThemeData(color: colors.primary),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Private Shared Space', style: AppTypography.titleLarge),
-            Text('Study accountability with one partner', style: AppTypography.bodySmall),
+            Text('Private Shared Space', style: AppTypography.titleLarge.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w800)),
+            Text('1-to-1 accountability with your study partner', style: AppTypography.bodySmall.copyWith(color: colors.textMuted)),
           ],
         ),
         actions: [
-          if (_isPaired)
+          if (isPaired)
             IconButton(
-              icon: const Icon(Icons.link_off_rounded, color: AppColors.textMuted),
+              icon: Icon(Icons.link_off_rounded, color: colors.textMuted),
               tooltip: 'Disconnect Space',
               onPressed: _confirmLeaveSpace,
             ),
@@ -214,24 +225,49 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_isPaired) ...[
+            // Cloud Sync & Auth Banner
+            if (!authService.isAuthenticated)
+              _buildAuthPromptBanner(authService, isDark),
+
+            if (sharedProvider.isLoading)
+              const LinearProgressIndicator(color: AppColors.deepForest),
+
+            const SizedBox(height: 8),
+
+            if (isPaired) ...[
+              // 1. Enchanted Whispering Meadow Sanctuary Hero Banner
+              _buildEnchantedSanctuaryHero(sharedProvider, isDark),
+
+              const SizedBox(height: AppSpacing.l),
+
+              // 2. 4 Quick-Action Cards: Shared Forest, Love Notes, Challenges, Timeline
+              _buildFourActionCards(context, isDark, sharedProvider, forest),
+
+              const SizedBox(height: AppSpacing.l),
+
               // Partner Status Card
-              _buildPartnerStatusCard(isDark),
+              _buildPartnerStatusCard(sharedProvider, isDark),
 
               const SizedBox(height: AppSpacing.l),
 
               // Combined Metrics Card
-              _buildCombinedMetricsCard(combinedFocusMins, combinedTreesCount, myTreesCount, isDark),
+              _buildCombinedMetricsCard(
+                combinedFocusMins,
+                combinedTreesCount,
+                myTreesCount,
+                sharedProvider.partnerName,
+                isDark,
+              ),
 
               const SizedBox(height: AppSpacing.l),
 
               // Shared Forest Grove Preview
-              _buildSharedGroveCard(forest, isDark),
+              _buildSharedGroveCard(forest, sharedProvider, isDark),
 
               const SizedBox(height: AppSpacing.l),
 
               // Pre-written Cheer Messages
-              _buildEncouragementCheerCard(isDark),
+              _buildEncouragementCheerCard(sharedProvider, isDark),
 
               const SizedBox(height: AppSpacing.l),
 
@@ -239,7 +275,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
               _buildPrivacyNoticeCard(isDark),
             ] else ...[
               // Unpaired State / Join Space
-              _buildUnpairedCard(isDark),
+              _buildUnpairedCard(sharedProvider, isDark),
 
               const SizedBox(height: AppSpacing.l),
 
@@ -259,26 +295,93 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
     );
   }
 
-  Widget _buildPartnerStatusCard(bool isDark) {
-    final initial = _partnerName.isNotEmpty ? _partnerName[0].toUpperCase() : 'P';
+  Widget _buildAuthPromptBanner(AuthService authService, bool isDark) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.amberWarm.withValues(alpha: 0.14),
+        borderRadius: AppRadius.roundedM,
+        border: Border.all(color: AppColors.amberWarm.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.cloud_sync_rounded, color: AppColors.amberHoney, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Cloud Sync Available',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  'Sign in to enable real cross-device partner pairing and secure cloud backups.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.tonal(
+            onPressed: () => authService.signInWithGoogle(),
+            style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+            child: const Text('Sign In', style: TextStyle(fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPartnerStatusCard(SharedSpaceProvider shared, bool isDark) {
+    final partnerName = shared.partnerName;
+    final initial = partnerName.isNotEmpty ? partnerName[0].toUpperCase() : 'P';
+    final isFocusing = shared.isPartnerFocusing;
+
     return NestCard(
       color: isDark ? AppColors.darkCard : AppColors.cardSurface,
       child: Row(
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: AppColors.sageTint,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.sageBorder, width: 1.5),
-            ),
-            child: Center(
-              child: Text(
-                initial,
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.deepForest),
+          Stack(
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  color: AppColors.sageTint,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.sageBorder, width: 1.5),
+                ),
+                child: Center(
+                  child: Text(
+                    initial,
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.deepForest),
+                  ),
+                ),
               ),
-            ),
+              if (isFocusing)
+                Positioned(
+                  bottom: 0,
+                  right: 0,
+                  child: Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: AppColors.forestEmerald,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                  ),
+                ),
+            ],
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -289,26 +392,32 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
                   children: [
                     Flexible(
                       child: Text(
-                        _partnerName,
+                        partnerName,
                         style: AppTypography.titleMedium,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const NestBadge(label: 'Connected', variant: NestBadgeVariant.safeGreen, isDense: true),
+                    NestBadge(
+                      label: isFocusing ? 'Focusing 🟢' : 'Connected',
+                      variant: isFocusing ? NestBadgeVariant.safeGreen : NestBadgeVariant.neutral,
+                      isDense: true,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _partnerTopic.isNotEmpty ? _partnerTopic : 'CBSE Class 10 Board Prep',
+                  isFocusing
+                      ? 'Studying now: ${shared.partnerTopic}'
+                      : 'Today: ${shared.partnerFocusMinutesToday} mins • ${shared.partnerTreesCountToday} trees',
                   style: AppTypography.bodySmall,
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.share_outlined, color: AppColors.deepForest),
-            onPressed: _copyInviteCode,
+            icon: Icon(Icons.share_outlined, color: isDark ? AppColors.sageLight : AppColors.deepForest),
+            onPressed: () => _copyInviteCode(shared.inviteCode),
             tooltip: 'Copy Invite Code',
           ),
         ],
@@ -316,7 +425,13 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
     );
   }
 
-  Widget _buildCombinedMetricsCard(int combinedFocusMins, int combinedTrees, int myTrees, bool isDark) {
+  Widget _buildCombinedMetricsCard(
+    int combinedFocusMins,
+    int combinedTrees,
+    int myTrees,
+    String partnerName,
+    bool isDark,
+  ) {
     return Row(
       children: [
         Expanded(
@@ -333,7 +448,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
               children: [
                 Text('Combined Focus', style: AppTypography.labelSmall),
                 const SizedBox(height: 4),
-                Text('$combinedFocusMins mins', style: AppTypography.titleLarge.copyWith(color: AppColors.deepForest)),
+                Text('$combinedFocusMins mins', style: AppTypography.titleLarge.copyWith(color: isDark ? AppColors.forestEmerald : AppColors.deepForest)),
                 const SizedBox(height: 2),
                 Text('Today • Both students', style: AppTypography.bodySmall.copyWith(fontSize: 10)),
               ],
@@ -357,7 +472,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
                 const SizedBox(height: 4),
                 Text('$combinedTrees Trees', style: AppTypography.titleLarge.copyWith(color: AppColors.sageGreen)),
                 const SizedBox(height: 2),
-                Text('$myTrees You • 0 $_partnerName', style: AppTypography.bodySmall.copyWith(fontSize: 10)),
+                Text('$myTrees You • ${combinedTrees - myTrees} $partnerName', style: AppTypography.bodySmall.copyWith(fontSize: 10)),
               ],
             ),
           ),
@@ -366,7 +481,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
     );
   }
 
-  Widget _buildSharedGroveCard(ForestProvider forest, bool isDark) {
+  Widget _buildSharedGroveCard(ForestProvider forest, SharedSpaceProvider shared, bool isDark) {
     final trees = forest.trees;
     return NestCard(
       color: isDark ? AppColors.darkCard : AppColors.elevatedSurface,
@@ -384,7 +499,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
                   Text('Both your study trees growing side by side', style: AppTypography.bodySmall),
                 ],
               ),
-              const NestBadge(label: 'Private 2-Person', variant: NestBadgeVariant.neutral),
+              const NestBadge(label: 'Private 1-on-1', variant: NestBadgeVariant.neutral),
             ],
           ),
           const SizedBox(height: AppSpacing.m),
@@ -433,7 +548,8 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
     );
   }
 
-  Widget _buildEncouragementCheerCard(bool isDark) {
+  Widget _buildEncouragementCheerCard(SharedSpaceProvider shared, bool isDark) {
+    final cheers = shared.cheers;
     return NestCard(
       color: isDark ? AppColors.darkCard : AppColors.cardSurface,
       child: Column(
@@ -443,52 +559,77 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Send Pre-written Cheer', style: AppTypography.titleMedium),
-              NestBadge(label: '$_cheersSent sent', variant: NestBadgeVariant.amber, isDense: true),
+              NestBadge(label: '${cheers.length} sent', variant: NestBadgeVariant.amber, isDense: true),
             ],
           ),
           const SizedBox(height: 4),
-          Text('Distraction-free encouragement without chat rabbit holes', style: AppTypography.bodySmall),
+          Text('Distraction-free encouragement without social media rabbit holes', style: AppTypography.bodySmall),
           const SizedBox(height: AppSpacing.m),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              _buildCheerChip('🌱', 'Keep growing!'),
-              _buildCheerChip('⭐', 'Proud of you!'),
-              _buildCheerChip('🔥', 'CBSE 10th Board ready!'),
-              _buildCheerChip('☕', 'Remember to take a break'),
-              _buildCheerChip('🏆', 'Let\'s score 95%+!'),
+              _buildCheerChip('🌱', 'Keep growing!', isDark),
+              _buildCheerChip('⭐', 'Proud of you!', isDark),
+              _buildCheerChip('🔥', 'CBSE 10th Board ready!', isDark),
+              _buildCheerChip('☕', 'Remember to take a break', isDark),
+              _buildCheerChip('🏆', 'Let\'s score 95%+!', isDark),
             ],
           ),
+          if (cheers.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Divider(height: 1),
+            const SizedBox(height: 10),
+            Text('Recent Cheers', style: AppTypography.labelSmall),
+            const SizedBox(height: 6),
+            ...cheers.take(3).map((c) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3.0),
+                  child: Row(
+                    children: [
+                      Text(c.emoji, style: const TextStyle(fontSize: 16)),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${c.senderName}: "${c.message}"',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildCheerChip(String emoji, String message) {
+  Widget _buildCheerChip(String emoji, String message, bool isDark) {
     return InkWell(
       onTap: () => _sendCheer(emoji, message),
       borderRadius: AppRadius.roundedS,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: AppColors.warmCream,
+          color: isDark ? AppColors.darkSurface : AppColors.warmCream,
           borderRadius: AppRadius.roundedS,
-          border: Border.all(color: AppColors.borderSubtle),
+          border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(emoji, style: const TextStyle(fontSize: 14)),
             const SizedBox(width: 6),
-            Text(message, style: AppTypography.labelMedium.copyWith(color: AppColors.textPrimary)),
+            Text(message, style: AppTypography.labelMedium.copyWith(color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildUnpairedCard(bool isDark) {
+  Widget _buildUnpairedCard(SharedSpaceProvider shared, bool isDark) {
+    final code = shared.inviteCode;
+
     return NestCard(
       color: isDark ? AppColors.darkCard : AppColors.cardSurface,
       child: Column(
@@ -533,9 +674,9 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
                       Text('YOUR INVITE CODE', style: AppTypography.labelSmall.copyWith(fontSize: 10, letterSpacing: 0.8)),
                       const SizedBox(height: 2),
                       Text(
-                        _inviteCode,
+                        code.isNotEmpty ? code : 'NEST-2027-CBSE',
                         style: AppTypography.titleMedium.copyWith(
-                          color: AppColors.deepForest,
+                          color: isDark ? AppColors.forestEmerald : AppColors.deepForest,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1.2,
                         ),
@@ -544,8 +685,13 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.copy_rounded, color: AppColors.deepForest, size: 20),
-                  onPressed: _copyInviteCode,
+                  icon: Icon(Icons.refresh_rounded, color: isDark ? AppColors.sageLight : AppColors.deepForest, size: 20),
+                  onPressed: _generateNewInviteCode,
+                  tooltip: 'Generate New Code',
+                ),
+                IconButton(
+                  icon: Icon(Icons.copy_rounded, color: isDark ? AppColors.sageLight : AppColors.deepForest, size: 20),
+                  onPressed: () => _copyInviteCode(code),
                   tooltip: 'Copy Code',
                 ),
               ],
@@ -556,7 +702,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
           NestButton(
             label: 'Share Invite Code',
             icon: Icons.share_rounded,
-            onPressed: _copyInviteCode,
+            onPressed: () => _copyInviteCode(code),
             variant: NestButtonVariant.primary,
             isFullWidth: true,
           ),
@@ -585,7 +731,7 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
           const SizedBox(height: AppSpacing.m),
           _buildHowItWorksItem(
             icon: Icons.park_rounded,
-            iconColor: AppColors.deepForest,
+            iconColor: isDark ? AppColors.forestEmerald : AppColors.deepForest,
             title: 'Joint Forest Sanctuary',
             subtitle: 'Every time either of you completes a focus session, your trees grow together in a shared grove.',
             isDark: isDark,
@@ -600,10 +746,10 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
           ),
           const SizedBox(height: 12),
           _buildHowItWorksItem(
-            icon: Icons.favorite_border_rounded,
-            iconColor: AppColors.amberHoney,
-            title: 'Pre-written Study Cheers',
-            subtitle: 'Send one-tap positive cheers like "Keep growing! 🌱" without opening chatting apps.',
+            icon: Icons.favorite_outline_rounded,
+            iconColor: AppColors.urgentRed,
+            title: 'Pre-written Cheers',
+            subtitle: 'Send encouragement emojis and notes with zero chat drama or notification spam.',
             isDark: isDark,
           ),
         ],
@@ -624,8 +770,8 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.12),
-            borderRadius: AppRadius.roundedS,
+            color: iconColor.withValues(alpha: 0.1),
+            borderRadius: AppRadius.roundedM,
           ),
           child: Icon(icon, color: iconColor, size: 20),
         ),
@@ -638,9 +784,10 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
               const SizedBox(height: 2),
               Text(
                 subtitle,
-                style: AppTypography.bodySmall.copyWith(
-                  color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary,
-                  height: 1.3,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                  height: 1.35,
                 ),
               ),
             ],
@@ -652,27 +799,399 @@ class _SharedSpaceScreenState extends State<SharedSpaceScreen> {
 
   Widget _buildPrivacyNoticeCard(bool isDark) {
     return Container(
-      padding: AppSpacing.cardPaddingDense,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : AppColors.sageTint.withValues(alpha: 0.5),
+        color: isDark ? AppColors.darkSurface : AppColors.sageTint.withValues(alpha: 0.5),
         borderRadius: AppRadius.roundedM,
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.sageBorder.withValues(alpha: 0.6)),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.sageBorder),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.shield_outlined, color: AppColors.deepForest, size: 20),
+          Icon(Icons.shield_outlined, color: isDark ? AppColors.forestEmerald : AppColors.deepForest, size: 20),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              'Your individual notes and private study topics are never shared. Only grove trees and focus minutes are synced to protect your focus and privacy.',
-              style: AppTypography.labelSmall.copyWith(
-                color: isDark ? AppColors.darkTextPrimary : AppColors.deepForestDark,
-                height: 1.3,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Privacy & Security Guarantee', style: AppTypography.labelMedium.copyWith(color: isDark ? AppColors.forestEmerald : AppColors.deepForest)),
+                const SizedBox(height: 2),
+                Text(
+                  'Your private notes, planner tasks, study journals, and unshared syllabus details remain 100% private to your device. Only mutual focus minutes and cheers are shared in this space.',
+                  style: TextStyle(fontSize: 11, color: isDark ? AppColors.darkTextSecondary : AppColors.textSecondary, height: 1.35),
+                ),
+              ],
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildEnchantedSanctuaryHero(SharedSpaceProvider shared, bool isDark) {
+    final partnerName = shared.partnerName.isNotEmpty ? shared.partnerName : 'Navya';
+    final isFocusing = shared.isPartnerFocusing;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: isDark
+              ? [const Color(0xFF1E2F23), const Color(0xFF121B15)]
+              : [const Color(0xFFE8F3EB), const Color(0xFFF6FBF7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.sageBorder,
+          width: 1.5,
+        ),
+        boxShadow: isDark ? [] : AppShadows.softCard,
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : AppColors.sageTint,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.sageBorder, width: 1.5),
+                ),
+                child: const Text('🐱', style: TextStyle(fontSize: 22)),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.cherryPink.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.cherryPink.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.favorite_rounded, color: AppColors.cherryPink, size: 14),
+                    SizedBox(width: 4),
+                    Text('Sanctuary', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.cherryPink)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkSurface : AppColors.sageTint,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.sageBorder, width: 1.5),
+                ),
+                child: const Text('🐱', style: TextStyle(fontSize: 22)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Arya ❤️ $partnerName',
+            style: AppTypography.titleLarge.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Together Since 12 Nov 2024 (338 Days) • Whispering Meadow',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(
+              color: isFocusing
+                  ? AppColors.safeGreen.withValues(alpha: 0.15)
+                  : (isDark ? AppColors.forestEmerald : AppColors.deepForest).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: isFocusing ? AppColors.safeGreen : (isDark ? AppColors.forestEmerald : AppColors.deepForest),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  isFocusing ? 'Partner Studying Now 🌿' : 'Accountability Active 🕊️',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: isFocusing ? AppColors.safeGreen : (isDark ? AppColors.forestEmerald : AppColors.deepForest),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFourActionCards(BuildContext context, bool isDark, SharedSpaceProvider shared, ForestProvider forest) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
+                icon: Icons.forest_rounded,
+                iconColor: AppColors.forestEmerald,
+                title: 'Shared Forest',
+                subtitle: '${forest.totalTreesCount + shared.partnerTreesCountToday} Trees Planted',
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Viewing Shared Forest Grove below 🌲')),
+                  );
+                },
+                isDark: isDark,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionCard(
+                icon: Icons.favorite_rounded,
+                iconColor: AppColors.cherryPink,
+                title: 'Love Notes',
+                subtitle: 'Send Cheers & Notes',
+                onTap: () => _sendCheer('💌', 'Keep going, you are doing amazing!'),
+                isDark: isDark,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _buildActionCard(
+                icon: Icons.emoji_events_rounded,
+                iconColor: AppColors.amberHoney,
+                title: 'Challenges',
+                subtitle: 'Daily Focus Goals',
+                onTap: () => _openChallengesDialog(context, isDark, shared),
+                isDark: isDark,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildActionCard(
+                icon: Icons.auto_stories_rounded,
+                iconColor: isDark ? AppColors.forestEmerald : AppColors.deepForest,
+                title: 'Timeline',
+                subtitle: 'Milestones & Memories',
+                onTap: () => _openTimelineDialog(context, isDark),
+                isDark: isDark,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionCard({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    required bool isDark,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        decoration: BoxDecoration(
+          color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
+          boxShadow: isDark ? [] : AppShadows.softCard,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: iconColor, size: 20),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openChallengesDialog(BuildContext context, bool isDark, SharedSpaceProvider shared) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.emoji_events_rounded, color: AppColors.amberHoney),
+            SizedBox(width: 8),
+            Text('Study Challenges', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildChallengeItem(
+              'Daily 50m Focus Target',
+              '${(shared.partnerFocusMinutesToday).clamp(0, 50)}/50 mins completed',
+              0.8,
+              isDark,
+            ),
+            const SizedBox(height: 12),
+            _buildChallengeItem(
+              'Twin Oaks Challenge',
+              'Plant 2 healthy trees in Whispering Meadow today',
+              1.0,
+              isDark,
+            ),
+            const SizedBox(height: 12),
+            _buildChallengeItem(
+              'Weekend Revision Sprint',
+              'Cover 3 CBSE chapters together',
+              0.66,
+              isDark,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChallengeItem(String title, String desc, double progress, bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              if (progress >= 1.0)
+                const Icon(Icons.check_circle_rounded, color: AppColors.safeGreen, size: 16),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(desc, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(
+            value: progress,
+            color: progress >= 1.0 ? AppColors.safeGreen : AppColors.sageGreen,
+            backgroundColor: Colors.grey.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openTimelineDialog(BuildContext context, bool isDark) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: const [
+            Icon(Icons.auto_stories_rounded, color: AppColors.sageGreen),
+            SizedBox(width: 8),
+            Text('Partner Timeline', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildTimelineItem('12 Nov 2024', 'Sanctuary Meadow established together 🌸', isDark),
+            const SizedBox(height: 10),
+            _buildTimelineItem('05 Jan 2025', 'First Ancient Oak bloomed in Shared Forest 🌳', isDark),
+            const SizedBox(height: 10),
+            _buildTimelineItem('18 Feb 2025', 'Surpassed 50 hours of mutual CBSE study 🏆', isDark),
+            const SizedBox(height: 10),
+            _buildTimelineItem('Today', 'Staying accountable & motivated every single day ✨', isDark),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimelineItem(String date, String text, bool isDark) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.sageGreen.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(date, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isDark ? AppColors.forestEmerald : AppColors.deepForest)),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(text, style: TextStyle(fontSize: 12, color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary)),
+        ),
+      ],
     );
   }
 }
