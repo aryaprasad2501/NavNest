@@ -9,8 +9,10 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_typography.dart';
 import '../../../core/widgets/google_logo.dart';
+import '../../../core/widgets/nest_ambient_background.dart';
 import '../../../core/widgets/nest_badge.dart';
 import '../../../core/widgets/nest_button.dart';
+import '../../../core/services/local_storage_service.dart';
 import '../../../core/widgets/nest_progress_bar.dart';
 import '../../distraction_control/presentation/app_blocker_screen.dart';
 import '../../navbloom/presentation/providers/forest_provider.dart';
@@ -262,15 +264,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                 ),
                 const SizedBox(height: 16),
-                Text('Daily Focus Target: $targetMins mins', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                Text(
+                  'Daily Focus Target: ${targetMins ~/ 60}h ${targetMins % 60 > 0 ? "${targetMins % 60}m" : ""} ($targetMins mins)',
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                ),
                 Slider(
-                  value: targetMins.toDouble(),
-                  min: 60,
-                  max: 300,
-                  divisions: 8,
-                  label: '$targetMins m',
+                  value: targetMins.clamp(15, 960).toDouble(),
+                  min: 15,
+                  max: 960,
+                  divisions: 63,
+                  label: '${targetMins ~/ 60}h ${targetMins % 60}m',
                   activeColor: AppColors.deepForest,
-                  onChanged: (v) => setDialogState(() => targetMins = v.round()),
+                  onChanged: (v) => setDialogState(() => targetMins = (v / 15).round() * 15),
                 ),
                 const SizedBox(height: 4),
                 const Text(
@@ -283,18 +288,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               FilledButton(
                 style: FilledButton.styleFrom(backgroundColor: AppColors.deepForest),
-                onPressed: () {
+                onPressed: () async {
                   final newName = nameController.text.trim();
+                  final localStorage = context.read<LocalStorageService>();
+                  final messenger = ScaffoldMessenger.of(context);
                   if (newName.isNotEmpty && forest.userProfile != null) {
                     final updated = forest.userProfile!.copyWith(
                       displayName: newName,
                       dailyTargetMinutes: targetMins,
                       updatedAt: DateTime.now(),
                     );
-                    forest.updateUserProfile(updated);
+                    await forest.updateUserProfile(updated);
+                    await localStorage.setDailyTargetMinutes(targetMins);
                   }
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  messenger.showSnackBar(
                     const SnackBar(content: Text('Profile preferences saved!')),
                   );
                 },
@@ -516,7 +524,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
 
-    final status = await _updateService.checkForUpdates(forceHasUpdate: true);
+    final status = await _updateService.checkForUpdates(forceHasUpdate: false);
     if (!mounted) return;
     Navigator.pop(context); // Dismiss checking indicator
 
@@ -603,7 +611,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   void _showDownloadingModal() {
-    // Step 5 & 6: Download progress modal with cancellation & SHA-256 verification
+    bool hasHandedOff = false;
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -614,13 +622,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
             final progress = _updateService.downloadProgress;
             final isVerifying = _updateService.status == UpdateStatus.verifyingChecksum;
             final isReady = _updateService.status == UpdateStatus.readyToInstall;
+            final hasError = _updateService.status == UpdateStatus.error;
 
-            if (isReady) {
+            if (isReady && !hasHandedOff) {
+              hasHandedOff = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
-                Navigator.pop(ctx);
+                if (Navigator.canPop(ctx)) {
+                  Navigator.pop(ctx);
+                }
                 _showOfficialAndroidInstallerPrompt();
               });
             }
+
+            if (hasError) {
+              return AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: AppRadius.roundedXL),
+                title: Center(
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.urgentRed.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.error_outline_rounded, color: AppColors.urgentRed, size: 36),
+                      ),
+                      const SizedBox(height: 12),
+                      Text('Update Check Failed', style: AppTypography.titleMedium),
+                    ],
+                  ),
+                ),
+                content: Text(
+                  _updateService.errorMessage ?? 'An error occurred during update verification.',
+                  style: AppTypography.bodySmall,
+                  textAlign: TextAlign.center,
+                ),
+                actions: [
+                  Center(
+                    child: TextButton(
+                      onPressed: () {
+                        _updateService.reset();
+                        Navigator.pop(ctx);
+                      },
+                      child: const Text('Dismiss', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            final totalSize = _updateService.latestRelease?.sizeBytes ?? 63160503;
+            final totalMb = (totalSize / (1024 * 1024)).toStringAsFixed(1);
+            final downloadedMb = (progress * (totalSize / (1024 * 1024))).toStringAsFixed(1);
 
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: AppRadius.roundedXL),
@@ -648,7 +702,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     Text(
                       isVerifying
                           ? 'Checking SHA-256 Checksum...'
-                          : '${(progress * 44.2).toStringAsFixed(1)} MB of 44.2 MB',
+                          : '$downloadedMb MB of $totalMb MB',
                       style: AppTypography.bodySmall,
                     ),
                   ],
@@ -783,13 +837,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final colors = NavThemeColors.of(context);
 
-    return Scaffold(
-      backgroundColor: colors.canvas,
-      appBar: AppBar(
-        backgroundColor: colors.canvas,
-        iconTheme: IconThemeData(color: colors.primary),
-        title: Text('Settings', style: AppTypography.titleLarge.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w800)),
-      ),
+    return NestAmbientBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          iconTheme: IconThemeData(color: colors.primary),
+          title: Text('Settings', style: AppTypography.titleLarge.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w800)),
+        ),
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
         children: [
@@ -930,16 +987,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: AppSpacing.xxl),
         ],
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildProfileTile(String name, int targetMins, bool isDark, String? photoUrl, String? email) {
+    final colors = NavThemeColors(isDark: isDark);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+        color: colors.surfaceCard,
         borderRadius: AppRadius.roundedXL,
-        border: Border.all(color: isDark ? AppColors.darkBorder : AppColors.borderSubtle),
+        border: Border.all(color: colors.borderSubtle),
         boxShadow: AppShadows.softCard,
       ),
       child: Row(
@@ -948,9 +1007,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: AppColors.sageTint,
+              color: colors.primary.withValues(alpha: 0.15),
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2),
+              border: Border.all(color: colors.borderSubtle, width: 2),
               image: photoUrl != null
                   ? DecorationImage(image: NetworkImage(photoUrl), fit: BoxFit.cover)
                   : null,
@@ -959,7 +1018,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ? Center(
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : 'S',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.deepForest),
+                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: colors.primary),
                     ),
                   )
                 : null,
@@ -975,7 +1034,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       child: Text(
                         name,
                         style: AppTypography.titleMedium.copyWith(
-                          color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                          color: colors.textPrimary,
                           fontWeight: FontWeight.w700,
                         ),
                         overflow: TextOverflow.ellipsis,
@@ -991,7 +1050,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? '$email • CBSE 2027'
                       : 'CBSE Class 10th Board 2027 • $targetMins m target',
                   style: AppTypography.bodySmall.copyWith(
-                    color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                    color: colors.textMuted,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -999,7 +1058,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
           IconButton(
-            icon: Icon(Icons.edit_outlined, color: isDark ? AppColors.sageLight : AppColors.deepForest),
+            icon: Icon(Icons.edit_outlined, color: colors.primary),
             onPressed: _showEditProfileDialog,
             tooltip: 'Edit Profile',
           ),
@@ -1009,6 +1068,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildGoogleAccountCard(AuthService authService, ForestProvider forest, bool isDark) {
+    final colors = NavThemeColors(isDark: isDark);
     final isLinked = authService.isGoogleLinked;
     final email = authService.currentUser?.email ?? '';
     final name = authService.currentUser?.displayName ?? forest.userProfile?.displayName ?? 'Student';
@@ -1018,12 +1078,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isDark ? AppColors.darkCard : AppColors.cardSurface,
+        color: colors.surfaceCard,
         borderRadius: AppRadius.roundedXL,
         border: Border.all(
           color: isLinked
-              ? AppColors.deepForest.withValues(alpha: 0.3)
-              : (isDark ? AppColors.darkBorder : AppColors.borderSubtle),
+              ? colors.primary.withValues(alpha: 0.35)
+              : colors.borderSubtle,
           width: isLinked ? 1.5 : 1,
         ),
         boxShadow: AppShadows.softCard,
@@ -1040,7 +1100,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   'Google Account & Cloud Backup',
                   style: AppTypography.titleMedium.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                    color: colors.textPrimary,
                   ),
                 ),
               ),
@@ -1048,18 +1108,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: AppColors.safeGreen.withValues(alpha: 0.12),
+                    color: colors.success.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.safeGreen.withValues(alpha: 0.4)),
+                    border: Border.all(color: colors.success.withValues(alpha: 0.4)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Icon(Icons.check_circle_rounded, size: 12, color: AppColors.safeGreen),
-                      SizedBox(width: 4),
+                    children: [
+                      Icon(Icons.check_circle_rounded, size: 12, color: colors.success),
+                      const SizedBox(width: 4),
                       Text(
                         'Synced',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.safeGreen),
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: colors.success),
                       ),
                     ],
                   ),
@@ -1071,7 +1131,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Text(
               'Link your Google account to automatically back up your CBSE 2027 syllabus progress, study sessions, and NavBloom sanctuary to Google Cloud.',
               style: AppTypography.bodySmall.copyWith(
-                color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                color: colors.textMuted,
                 height: 1.35,
               ),
             ),
@@ -1080,8 +1140,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  backgroundColor: isDark ? const Color(0xFF232D28) : Colors.white,
-                  side: BorderSide(color: isDark ? Colors.white24 : Colors.grey.shade300),
+                  backgroundColor: colors.surfaceElevated,
+                  side: BorderSide(color: colors.borderSubtle),
                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 1,
@@ -1093,7 +1153,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : const Color(0xFF3C4043),
+                    color: colors.textPrimary,
                   ),
                 ),
                 onPressed: _handleGoogleSignIn,
@@ -1104,12 +1164,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               children: [
                 CircleAvatar(
                   radius: 20,
-                  backgroundColor: AppColors.sageTint,
+                  backgroundColor: colors.primary.withValues(alpha: 0.15),
                   backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
                   child: photoUrl == null
                       ? Text(
                           name.isNotEmpty ? name[0].toUpperCase() : 'G',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.deepForest),
+                          style: TextStyle(fontWeight: FontWeight.bold, color: colors.primary),
                         )
                       : null,
                 ),
@@ -1123,14 +1183,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 14,
-                          color: isDark ? AppColors.darkTextPrimary : AppColors.textPrimary,
+                          color: colors.textPrimary,
                         ),
                       ),
                       Text(
                         email,
                         style: TextStyle(
                           fontSize: 12,
-                          color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                          color: colors.textMuted,
                         ),
                       ),
                     ],
@@ -1142,17 +1202,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1D2622) : AppColors.sageTint.withValues(alpha: 0.5),
+                color: colors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.cloud_done_outlined, size: 16, color: AppColors.deepForest),
+                  Icon(Icons.cloud_done_outlined, size: 16, color: colors.primary),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       authService.syncStatusMessage ?? 'All syllabus & forest progress backed up ✓',
-                      style: const TextStyle(fontSize: 11, color: AppColors.deepForest, fontWeight: FontWeight.w600),
+                      style: TextStyle(fontSize: 11, color: colors.primary, fontWeight: FontWeight.w600),
                     ),
                   ),
                 ],
@@ -1171,9 +1231,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             final success = await authService.syncDataWithCloud();
                             if (mounted && success) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Synchronized with Google Cloud successfully! ✓'),
-                                  backgroundColor: AppColors.deepForest,
+                                SnackBar(
+                                  content: const Text('Synchronized with Google Cloud successfully! ✓'),
+                                  backgroundColor: colors.primary,
                                 ),
                               );
                             }
@@ -1183,7 +1243,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(width: 10),
                 TextButton(
                   onPressed: _showSignOutDialog,
-                  child: const Text('Sign Out', style: TextStyle(color: AppColors.urgentRed, fontSize: 13)),
+                  child: Text('Sign Out', style: TextStyle(color: colors.error, fontSize: 13)),
                 ),
               ],
             ),
@@ -1269,8 +1329,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Widget _buildThemeSelectorCard(ThemeService themeService, bool isDark) {
-    final currentMode = themeService.themeMode;
+    final preference = themeService.preference;
     final colors = NavThemeColors(isDark: isDark);
+
+    String statusText;
+    switch (preference) {
+      case NavThemePreference.solar:
+        statusText = 'Follow the day (Auto Dawn ☀️ & Midnight 🌙 after evening)';
+        break;
+      case NavThemePreference.system:
+        statusText = 'Follow Android system (Matches device ⚙️)';
+        break;
+      case NavThemePreference.dawn:
+        statusText = 'Dawn (Morning Nature ☀️ forced)';
+        break;
+      case NavThemePreference.midnight:
+        statusText = 'Midnight (Moonlit Nature 🌙 forced)';
+        break;
+    }
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -1283,48 +1359,59 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: colors.canvas,
-                  borderRadius: AppRadius.roundedM,
+          InkWell(
+            onTap: () => _showThemeSettingsModal(context, themeService, colors),
+            borderRadius: BorderRadius.circular(12),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: colors.canvas,
+                    borderRadius: AppRadius.roundedM,
+                  ),
+                  child: Icon(
+                    Icons.palette_outlined,
+                    color: colors.primary,
+                    size: 20,
+                  ),
                 ),
-                child: Icon(
-                  Icons.palette_outlined,
-                  color: colors.primary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Sanctuary Theme',
-                      style: AppTypography.titleSmall.copyWith(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w600,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Sanctuary Theme',
+                            style: AppTypography.titleSmall.copyWith(
+                              color: colors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const Spacer(),
+                          Icon(Icons.tune_rounded, size: 16, color: colors.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Schedule',
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: colors.primary),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      currentMode == ThemeMode.dark
-                          ? 'Midnight (Moonlit Nature 🌙)'
-                          : currentMode == ThemeMode.light
-                              ? 'Dawn (Morning Nature ☀️)'
-                              : 'System Default (Matches device ⚙️)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.textMuted,
+                      const SizedBox(height: 2),
+                      Text(
+                        statusText,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: colors.textMuted,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           Container(
@@ -1337,30 +1424,347 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Row(
               children: [
                 _buildThemeSegmentOption(
+                  label: 'Auto Day',
+                  icon: Icons.auto_awesome_rounded,
+                  isSelected: preference == NavThemePreference.solar,
+                  onTap: () => themeService.setPreference(NavThemePreference.solar),
+                  colors: colors,
+                ),
+                _buildThemeSegmentOption(
                   label: 'Dawn',
                   icon: Icons.wb_sunny_rounded,
-                  isSelected: currentMode == ThemeMode.light,
-                  onTap: () => themeService.setThemeMode(ThemeMode.light),
+                  isSelected: preference == NavThemePreference.dawn,
+                  onTap: () => themeService.setPreference(NavThemePreference.dawn),
                   colors: colors,
                 ),
                 _buildThemeSegmentOption(
                   label: 'Midnight',
                   icon: Icons.nightlight_round,
-                  isSelected: currentMode == ThemeMode.dark,
-                  onTap: () => themeService.setThemeMode(ThemeMode.dark),
+                  isSelected: preference == NavThemePreference.midnight,
+                  onTap: () => themeService.setPreference(NavThemePreference.midnight),
                   colors: colors,
                 ),
                 _buildThemeSegmentOption(
                   label: 'System',
                   icon: Icons.brightness_auto_rounded,
-                  isSelected: currentMode == ThemeMode.system,
-                  onTap: () => themeService.setThemeMode(ThemeMode.system),
+                  isSelected: preference == NavThemePreference.system,
+                  onTap: () => themeService.setPreference(NavThemePreference.system),
                   colors: colors,
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showThemeSettingsModal(BuildContext context, ThemeService themeService, NavThemeColors colors) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final preference = themeService.preference;
+            final useCustom = themeService.useCustomSchedule;
+            final dayHour = themeService.dayStartHour;
+            final nightHour = themeService.nightStartHour;
+
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              decoration: BoxDecoration(
+                color: colors.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                border: Border.all(color: colors.borderSubtle),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: colors.textMuted.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Theme Settings',
+                        style: AppTypography.titleLarge.copyWith(
+                          color: colors.textPrimary,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.close_rounded, color: colors.textMuted),
+                        onPressed: () => Navigator.pop(sheetContext),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Option 1: Follow the day
+                  _buildThemeOptionTile(
+                    title: 'Follow the day',
+                    subtitle: 'Automatically switch based on sunrise & sunset\n(Dawn in daytime, Midnight after 6:00 PM evening)',
+                    icon: Icons.wb_twilight_rounded,
+                    isSelected: preference == NavThemePreference.solar,
+                    onTap: () async {
+                      await themeService.setPreference(NavThemePreference.solar);
+                      setModalState(() {});
+                    },
+                    colors: colors,
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Option 2: Follow Android system
+                  _buildThemeOptionTile(
+                    title: 'Follow Android system',
+                    subtitle: "Use your phone's Light/Dark operating system setting",
+                    icon: Icons.android_rounded,
+                    isSelected: preference == NavThemePreference.system,
+                    onTap: () async {
+                      await themeService.setPreference(NavThemePreference.system);
+                      setModalState(() {});
+                    },
+                    colors: colors,
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Option 3: Choose manually
+                  _buildThemeOptionTile(
+                    title: 'Choose manually',
+                    subtitle: 'Stay fixed in Dawn (Morning) or Midnight (Moonlit)',
+                    icon: Icons.touch_app_rounded,
+                    isSelected: preference == NavThemePreference.dawn || preference == NavThemePreference.midnight,
+                    onTap: () async {
+                      await themeService.setPreference(themeService.isDarkMode ? NavThemePreference.midnight : NavThemePreference.dawn);
+                      setModalState(() {});
+                    },
+                    colors: colors,
+                  ),
+
+                  if (preference == NavThemePreference.dawn || preference == NavThemePreference.midnight) ...[
+                    const SizedBox(height: 10),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 48),
+                      child: Row(
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Dawn ☀️'),
+                            selected: preference == NavThemePreference.dawn,
+                            onSelected: (_) async {
+                              await themeService.setPreference(NavThemePreference.dawn);
+                              setModalState(() {});
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('Midnight 🌙'),
+                            selected: preference == NavThemePreference.midnight,
+                            onSelected: (_) async {
+                              await themeService.setPreference(NavThemePreference.midnight);
+                              setModalState(() {});
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 18),
+                  const Divider(),
+                  const SizedBox(height: 10),
+
+                  // Custom Day/Night Schedule Switch
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Custom day/night schedule',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Use custom start times instead of location defaults',
+                              style: TextStyle(fontSize: 12, color: colors.textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: useCustom,
+                        activeTrackColor: colors.primary,
+                        onChanged: (val) async {
+                          await themeService.setSchedule(
+                            useCustom: val,
+                            dayHour: dayHour,
+                            nightHour: nightHour,
+                          );
+                          setModalState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+
+                  if (useCustom) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: colors.canvas,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: colors.borderSubtle),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Day starts at', style: TextStyle(fontSize: 11, color: colors.textMuted)),
+                                    Text('${dayHour % 12 == 0 ? 12 : dayHour % 12}:00 ${dayHour >= 12 ? 'PM' : 'AM'}', style: TextStyle(fontWeight: FontWeight.bold, color: colors.textPrimary)),
+                                  ],
+                                ),
+                                DropdownButton<int>(
+                                  value: dayHour,
+                                  underline: const SizedBox.shrink(),
+                                  dropdownColor: colors.surfaceElevated,
+                                  items: [5, 6, 7, 8].map((h) => DropdownMenuItem(value: h, child: Text('$h:00 AM'))).toList(),
+                                  onChanged: (val) async {
+                                    if (val != null) {
+                                      await themeService.setSchedule(useCustom: true, dayHour: val, nightHour: nightHour);
+                                      setModalState(() {});
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: colors.canvas,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: colors.borderSubtle),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('Night starts at', style: TextStyle(fontSize: 11, color: colors.textMuted)),
+                                    Text('${nightHour % 12 == 0 ? 12 : nightHour % 12}:00 ${nightHour >= 12 ? 'PM' : 'AM'}', style: TextStyle(fontWeight: FontWeight.bold, color: colors.textPrimary)),
+                                  ],
+                                ),
+                                DropdownButton<int>(
+                                  value: nightHour,
+                                  underline: const SizedBox.shrink(),
+                                  dropdownColor: colors.surfaceElevated,
+                                  items: [17, 18, 19, 20, 21].map((h) => DropdownMenuItem(value: h, child: Text('${h - 12}:00 PM'))).toList(),
+                                  onChanged: (val) async {
+                                    if (val != null) {
+                                      await themeService.setSchedule(useCustom: true, dayHour: dayHour, nightHour: val);
+                                      setModalState(() {});
+                                    }
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildThemeOptionTile({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required NavThemeColors colors,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? colors.primaryContainer.withValues(alpha: 0.3) : colors.canvas,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? colors.primary : colors.borderSubtle,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: isSelected ? colors.primary : colors.textMuted, size: 22),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: colors.textMuted,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+              color: isSelected ? colors.primary : colors.textMuted.withValues(alpha: 0.5),
+              size: 20,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1404,7 +1808,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 icon,
                 size: 15,
                 color: isSelected
-                    ? Colors.white
+                    ? (colors.isDark ? colors.canvas : Colors.white)
                     : colors.textMuted,
               ),
               const SizedBox(width: 5),
@@ -1414,7 +1818,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                   color: isSelected
-                      ? Colors.white
+                      ? (colors.isDark ? colors.canvas : Colors.white)
                       : colors.textPrimary,
                 ),
               ),

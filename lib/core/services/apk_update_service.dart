@@ -116,12 +116,12 @@ class ApkUpdateService extends ChangeNotifier {
           version: '1.2.0',
           versionCode: 2,
           releaseNotes:
-              '• Global Opt-In Demo Mode with isolated database & 30+ mature trees\n• Enhanced NavBloom Storybook Grove with dynamic growth stages\n• CBSE Class 10 Board 2027 Syllabus complete tracking\n• Real Android App Blocker & Strict Mode diagnostics\n• Cryptographically verified APK update delivery workflow',
+              '• Shared Space 1-to-1 Partner Pairing & Cloud Sync fixes\n• AI-driven Auto Study Plan Generator in Planner\n• Home screen Daily Study Goal management & quick presets\n• Reliable Focus Timer work/break alarms & background persistence\n• Distraction Control UPI/banking app accessibility guidance',
           downloadUrl:
               'https://github.com/aryaprasad2501/NavNest/releases/download/v1.2.0/app-release.apk',
           sha256Checksum:
-              'db841929843391f4e4d1ee732d34f545a4a932467f24007abd760cf24bc70915',
-          sizeBytes: 61588039,
+              '6c719003771ec44e964630d5e8ef0d1ae3766b45369b207438ab9acdf4f2f4b7',
+          sizeBytes: 63160503,
         );
       }
 
@@ -224,12 +224,14 @@ class ApkUpdateService extends ChangeNotifier {
       final calculatedSha256 = sha256.convert(fileBytes).toString();
 
       // If real APK was downloaded, verify calculated hash against release manifest
+      final expectedSha = _latestRelease!.sha256Checksum.trim().toLowerCase();
+      final actualSha = calculatedSha256.trim().toLowerCase();
       if (downloadedRealBytes &&
-          _latestRelease!.sha256Checksum.isNotEmpty &&
-          calculatedSha256 != _latestRelease!.sha256Checksum) {
+          expectedSha.isNotEmpty &&
+          actualSha != expectedSha) {
         _status = UpdateStatus.error;
         _errorMessage =
-            'Cryptographic integrity error: Downloaded APK checksum ($calculatedSha256) does not match expected release manifest (${_latestRelease!.sha256Checksum}). Installation rejected.';
+            'Cryptographic integrity error: Downloaded APK checksum does not match expected release manifest. Installation rejected.';
         if (await targetFile.exists()) await targetFile.delete();
         notifyListeners();
         return;
